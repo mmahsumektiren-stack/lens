@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#14161a">
+  <title>Lens Capture</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="top">
+    <h1 id="title">Tekrar</h1>
+    <span id="netBadge" class="badge" hidden>Offline</span>
+  </header>
+
+  <main>
+    <!-- TEKRAR -->
+    <section id="view-review" class="view">
+      <div id="reviewStats" class="stats"></div>
+      <div id="reviewArea"></div>
+    </section>
+
+    <!-- EKLE / YAKALA -->
+    <section id="view-add" class="view" hidden>
+      <p class="hint" id="addHint">Paylaşılan ya da yapıştırılan metin. Öğrenmek istediğin kelimelere dokun; hiçbirini seçmezsen metnin tamamı kaydedilir.</p>
+      <textarea id="addText" rows="4" placeholder="İngilizce kelime, kalıp ya da cümle…"></textarea>
+      <div class="row">
+        <button id="pasteBtn" class="ghost">Panodan yapıştır</button>
+        <button id="clearSelBtn" class="ghost">Seçimi temizle</button>
+      </div>
+      <div id="tokens" class="tokens"></div>
+      <div class="target">
+        <span class="label">Öğrenilecek:</span>
+        <strong id="targetPreview">—</strong>
+      </div>
+      <div id="sourceLine" class="source" hidden></div>
+      <button id="saveBtn" class="primary big">Kaydet</button>
+    </section>
+
+    <!-- KARTLAR -->
+    <section id="view-list" class="view" hidden>
+      <input id="search" type="search" placeholder="Kartlarda ara…">
+      <div id="pendingBar" class="pending" hidden></div>
+      <ul id="cardList" class="list"></ul>
+    </section>
+
+    <!-- AYARLAR -->
+    <section id="view-settings" class="view" hidden>
+      <label class="field">
+        <span>Gemini API anahtarı</span>
+        <input id="apiKey" type="password" autocomplete="off" placeholder="AIza…">
+        <small>aistudio.google.com → Get API key. Anahtar sadece bu telefonda saklanır.</small>
+      </label>
+      <label class="field">
+        <span>Model</span>
+        <input id="model" type="text" placeholder="gemini-2.5-flash">
+      </label>
+      <label class="toggle">
+        <input id="closeAfterSave" type="checkbox">
+        <span>Paylaşımdan kaydedince uygulamayı kapat</span>
+      </label>
+      <label class="toggle">
+        <input id="autoSpeak" type="checkbox">
+        <span>Kart açılınca sesli oku</span>
+      </label>
+      <button id="saveSettings" class="primary">Ayarları kaydet</button>
+      <button id="testKey" class="ghost">Anahtarı test et</button>
+
+      <h2>Yedek</h2>
+      <div class="row">
+        <button id="exportBtn" class="ghost">Dışa aktar (JSON)</button>
+        <label class="ghost filebtn">İçe aktar<input id="importFile" type="file" accept="application/json" hidden></label>
+      </div>
+      <div id="statsBox" class="statsbox"></div>
+      <p class="hint">Kartlar telefonun tarayıcı deposunda (IndexedDB) tutulur. Ara ara yedek almanı öneririm.</p>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button data-view="review" class="active"><span class="ico">↻</span>Tekrar<b id="dueBadge" hidden></b></button>
+    <button data-view="add"><span class="ico">＋</span>Ekle</button>
+    <button data-view="list"><span class="ico">☰</span>Kartlar</button>
+    <button data-view="settings"><span class="ico">⚙</span>Ayarlar</button>
+  </nav>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
