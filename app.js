@@ -441,6 +441,21 @@ function bind() {
   });
   $('#clearSelBtn').addEventListener('click', () => { addState.selected.clear(); renderTokens(); });
   $('#pasteBtn').addEventListener('click', pasteFromClipboard);
+  $('#clipAdd').addEventListener('click', () => {
+    const t = $('#clipBanner').dataset.text || '';
+    store.set('lastClip', t);
+    $('#clipBanner').hidden = true;
+    addState.selected.clear();
+    addState.source = '';
+    $('#sourceLine').hidden = true;
+    show('add');
+    $('#addText').value = t;
+    renderTokens();
+  });
+  $('#clipNo').addEventListener('click', () => {
+    store.set('lastClip', $('#clipBanner').dataset.text || '');
+    $('#clipBanner').hidden = true;
+  });
   $('#saveBtn').addEventListener('click', onSave);
 
   $('#reviewArea').addEventListener('click', (e) => {
@@ -550,7 +565,7 @@ function bind() {
   window.addEventListener('online', () => { $('#netBadge').hidden = true; enrichPending(); });
   window.addEventListener('offline', () => { $('#netBadge').hidden = false; });
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') { refreshBadges(); if (currentView === 'review') renderReview(); enrichPending(); }
+    if (document.visibilityState === 'visible') { refreshBadges(); if (currentView === 'review') renderReview(); enrichPending(); checkClipboard(); }
   });
 }
 
@@ -559,12 +574,90 @@ async function pasteFromClipboard() {
     const t = await navigator.clipboard.readText();
     if (!t) return toast('Pano boş');
     $('#addText').value = cleanShared(t);
+    store.set('lastClip', cleanShared(t));
+    $('#clipBanner').hidden = true;
     addState.selected.clear();
     renderTokens();
   } catch {
     toast('Panoya erişilemedi — metin kutusuna uzun basıp yapıştır');
     $('#addText').focus();
   }
+}
+
+/* ---------- X (Twitter) linkinden tweet metni ---------- */
+async function fetchJSON(url, ms = 7000) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try {
+    const r = await fetch(url, { signal: ctl.signal });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return await r.json();
+  } finally {
+    clearTimeout(t);
+  }
+}
+function oembedJSONP(tweetUrl, ms = 7000) {
+  return new Promise((res, rej) => {
+    const cb = '__lens_cb' + Date.now();
+    const s = document.createElement('script');
+    const done = (fn, v) => { clearTimeout(timer); delete window[cb]; s.remove(); fn(v); };
+    const timer = setTimeout(() => done(rej, new Error('timeout')), ms);
+    window[cb] = (d) => done(res, d);
+    s.onerror = () => done(rej, new Error('oembed'));
+    s.src = `https://publish.twitter.com/oembed?omit_script=1&dnt=1&callback=${cb}&url=${encodeURIComponent(tweetUrl.replace('x.com', 'twitter.com'))}`;
+    document.head.appendChild(s);
+  });
+}
+async function getTweetText(tweetUrl, id) {
+  const tries = [
+    async () => (await fetchJSON(`https://api.fxtwitter.com/status/${id}`)).tweet?.text,
+    async () => (await fetchJSON(`https://api.vxtwitter.com/Twitter/status/${id}`)).text,
+    async () => {
+      const d = await oembedJSONP(tweetUrl);
+      const div = document.createElement('div');
+      div.innerHTML = d.html || '';
+      const p = div.querySelector('p');
+      if (p) p.querySelectorAll('br').forEach((br) => br.replaceWith('\n'));
+      return p?.textContent;
+    }
+  ];
+  for (const t of tries) {
+    try {
+      const txt = cleanShared(await t());
+      if (txt) return txt;
+    } catch {}
+  }
+  return '';
+}
+async function loadTweetText(tweetUrl, id) {
+  const ta = $('#addText');
+  ta.placeholder = 'Tweet metni getiriliyor…';
+  const txt = await getTweetText(tweetUrl, id);
+  ta.placeholder = 'İngilizce kelime, kalıp ya da cümle…';
+  if (txt && !ta.value.trim()) {
+    ta.value = txt;
+    addState.selected.clear();
+    renderTokens();
+  } else if (!txt) {
+    toast('Tweet metni alınamadı — metni kopyalayıp “Panodan yapıştır”a bas', 4000);
+  }
+}
+
+/* ---------- panoda yeni metin varsa öner ---------- */
+async function checkClipboard() {
+  const banner = $('#clipBanner');
+  if (!navigator.clipboard?.readText || document.visibilityState !== 'visible') return;
+  if (currentView === 'add' && $('#addText').value.trim()) return;
+  try {
+    // izin bir kez verildiyse dokunmadan okunabilir; verilmediyse sessizce geçer
+    const perm = await navigator.permissions?.query({ name: 'clipboard-read' }).catch(() => null);
+    if (perm && perm.state !== 'granted') return;
+    const t = cleanShared(await navigator.clipboard.readText());
+    if (!t || t.length > 1500 || !/[A-Za-z]{2}/.test(t) || t === store.get('lastClip', '')) return;
+    banner.querySelector('span').textContent = t.length > 80 ? t.slice(0, 80) + '…' : t;
+    banner.dataset.text = t;
+    banner.hidden = false;
+  } catch {}
 }
 
 /* ---------- paylaşımdan gelen veri ---------- */
@@ -576,14 +669,19 @@ function handleLaunchParams() {
   const linkInText = (text.match(URL_RE) || [])[0] || '';
   const body = cleanShared(text) || cleanShared(title);
 
-  if (body) {
+  const source = url || linkInText;
+  const tweetId = (source.match(/(?:x|twitter)\.com\/[^/]+\/status\/(\d+)/i) || [])[1];
+
+  if (body || tweetId) {
     addState.fromShare = true;
-    addState.source = url || linkInText;
+    addState.source = source;
     $('#addText').value = body;
-    $('#sourceLine').hidden = !addState.source;
-    $('#sourceLine').textContent = addState.source ? 'Kaynak: ' + addState.source : '';
+    $('#sourceLine').hidden = !source;
+    $('#sourceLine').textContent = source ? 'Kaynak: ' + source : '';
     history.replaceState(null, '', location.pathname);
     show('add');
+    // X'in paylaş düğmesi sadece link gönderir → tweet metnini kendimiz çekiyoruz
+    if (!body && tweetId) loadTweetText(source, tweetId);
     return;
   }
   const view = p.get('view');
@@ -608,6 +706,7 @@ function handleLaunchParams() {
   refreshBadges();
   handleLaunchParams();
   enrichPending();
+  checkClipboard();
   if ('speechSynthesis' in window) speechSynthesis.getVoices();
   if ('serviceWorker' in navigator && location.protocol !== 'file:') {
     navigator.serviceWorker.register('sw.js').catch(() => {});

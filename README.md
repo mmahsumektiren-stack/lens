@@ -28,6 +28,8 @@ Paylaş menüsü ve kurulum için site **HTTPS** üzerinden açılmalı.
   - Öğrenmek istediğin kelimelere dokun. Kalıp için ilk ve son kelimeye dokunman yeter, aradakiler otomatik dahil olur.
   - Hiçbir şey seçmezsen metnin tamamı cümle kartı olur (çeviri + öne çıkan kalıplar).
   - **Kaydet** → uygulama kendini kapatır, kaldığın yere dönersin.
+- **X'te:** tweet altındaki paylaş ikonu → **Şununla paylaş** → **Lens**. X sadece link gönderir, Lens tweet metnini kendisi çeker.
+- **Kopyala yeter:** metni kopyalayıp Lens'i açınca üstte "Panoda yeni metin → Ekle" çıkar (ilk seferde "Panodan yapıştır"a basıp izin ver).
 - **Paylaş çıkmıyorsa:** metni kopyala → ana ekranda Lens ikonuna uzun bas → **Panodan ekle**.
 - **Tekrar:** Bilmedim / Zor / İyi / Kolay. Bildiğin kartların aralığı uzar (1 → 3 → 8 → 20+ gün). Birkaç tekrardan sonra kartlar bazen "boşluk doldur" moduyla gelir.
 - Aynı şeyi tekrar yakalarsan kopya açılmaz, kart tekrara öne alınır.

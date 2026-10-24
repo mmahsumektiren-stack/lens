@@ -154,3 +154,11 @@ button { cursor: pointer; border: 0; border-radius: var(--radius); padding: 11px
 }
 
 .pending[hidden], .toast[hidden] { display: none; }
+
+.clipbanner { margin: 0 16px 12px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--accent);
+  border-radius: var(--radius); display: flex; gap: 8px; align-items: center; }
+.clipbanner[hidden] { display: none; }
+.clipbanner > div { flex: 1; min-width: 0; }
+.clipbanner small { display: block; color: var(--muted); font-size: 12px; }
+.clipbanner span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clipbanner button { padding: 9px 12px; }
