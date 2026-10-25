@@ -176,8 +176,8 @@ function cleanShared(text) {
 function tokenize(text) {
   // kelimeleri noktalama olmadan, ama orijinal sırasıyla
   // satır sonları ayrı token olarak tutulur ki X'teki düzen korunsun
-  return (text.match(/\n+|[A-Za-z0-9’'\-]+|[^\sA-Za-z0-9’'\-]+/g) || []).map((raw) =>
-    raw[0] === '\n' ? { raw, nl: true, word: false } : { raw, word: /[A-Za-z]/.test(raw) });
+  return (text.match(/\s+|[A-Za-z0-9’'\-]+|[^\sA-Za-z0-9’'\-]+/g) || []).map((raw) =>
+    /^\s/.test(raw) ? { raw, space: true, word: false } : { raw, word: /[A-Za-z]/.test(raw) });
 }
 function normalizeText(t) {
   // satır sonlarını koru, satır içi fazla boşlukları sadeleştir
@@ -191,7 +191,7 @@ function sentenceAround(text, phrase) {
 }
 function highlight(context, term, asBlank = false) {
   const safe = esc(context);
-  if (!term) return safe;
+  if (!term || normalizeText(term) === normalizeText(context)) return safe;
   const re = new RegExp(esc(term).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
   return re.test(safe)
     ? safe.replace(re, (m) => (asBlank ? '<span class="blank">&nbsp;</span>' : `<mark>${m}</mark>`))
@@ -241,22 +241,51 @@ const addState = { fromShare: false, source: '', selected: new Set(), tokens: []
 function renderTokens() {
   const text = $('#addText').value;
   addState.tokens = tokenize(text);
-  // seçim artık mevcut değilse temizle
   for (const i of [...addState.selected]) if (!addState.tokens[i]?.word) addState.selected.delete(i);
+  const body = addState.tokens.map((t, i) => (t.word
+    ? `<span class="w${addState.selected.has(i) ? ' on' : ''}" data-i="${i}">${esc(t.raw)}</span>`
+    : esc(t.raw))).join('');
+  const hasWords = addState.tokens.some((t) => t.word);
   const box = $('#tokens');
-  const showTokens = addState.tokens.filter((t) => t.word).length > 1;
-  box.innerHTML = showTokens
-    ? addState.tokens.map((t, i) => (t.nl ? '<span class="tokbr"></span>' : t.word ? `<button class="tok${addState.selected.has(i) ? ' on' : ''}" data-i="${i}">${esc(t.raw)}</button>` : '')).join('')
-    : '';
+  box.innerHTML = !hasWords ? '' : addState.tweet
+    ? tweetHTML(addState.tweet, body)
+    : `<div class="plainpost">${body}</div>`;
+  // tweet varsa ham metin kutusu gizli; "Metni düzenle" ile açılır
+  $('#addText').hidden = !!addState.tweet && !addState.editing;
+  $('#editTextBtn').hidden = !addState.tweet;
   $('#targetPreview').textContent = currentTarget() || '—';
 }
 function currentTarget() {
   const text = $('#addText').value.trim();
   if (!addState.selected.size) return normalizeText(text);
   const idx = [...addState.selected].sort((a, b) => a - b);
-  // ilk ve son seçili kelime arası (aradaki kelimeler dahil) — kalıp seçmek için iki uca dokunmak yeter
-  return addState.tokens.slice(idx[0], idx[idx.length - 1] + 1).map((t) => t.raw).join(' ')
-    .replace(/ ?(\n+) ?/g, '$1').replace(/ +([,.!?;:])/g, '$1').trim();
+  // ilk ve son seçili kelime arası (aradaki her şey dahil) — kalıp seçmek için iki uca dokunmak yeter
+  return normalizeText(addState.tokens.slice(idx[0], idx[idx.length - 1] + 1).map((t) => t.raw).join(''));
+}
+
+/* ---------- X gönderisi görünümü ---------- */
+function tweetDate(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return d.toLocaleString('tr-TR', { hour: '2-digit', minute: '2-digit' }) + ' · ' +
+    d.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: '2-digit' });
+}
+function tweetHTML(t, bodyHTML) {
+  const initial = esc((t.name || t.handle || '?').trim()[0] || '?');
+  const avatar = t.avatar
+    ? `<img class="tw-av" src="${esc(t.avatar)}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'tw-av tw-av-f',textContent:'${initial}'}))">`
+    : `<div class="tw-av tw-av-f">${initial}</div>`;
+  const photos = (t.photos || []).slice(0, 4);
+  return `<article class="tw">
+    <header class="tw-head">${avatar}
+      <div class="tw-id"><div class="tw-name">${esc(t.name || t.handle || 'X')}</div>
+      ${t.handle ? `<div class="tw-handle">@${esc(t.handle)}</div>` : ''}</div>
+      <span class="tw-x" aria-hidden="true">𝕏</span>
+    </header>
+    <div class="tw-text">${bodyHTML}</div>
+    ${photos.length ? `<div class="tw-media n${photos.length}">${photos.map((u) => `<img src="${esc(u)}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.remove()">`).join('')}</div>` : ''}
+    <footer class="tw-foot">${esc(tweetDate(t.date))}${t.url ? ` · <a href="${esc(t.url)}" target="_blank" rel="noopener">X'te aç ↗</a>` : ''}</footer>
+  </article>`;
 }
 
 async function onSave() {
@@ -272,7 +301,7 @@ async function onSave() {
     toast('Zaten vardı, tekrara öne alındı');
   } else {
     const card = {
-      id: uid(), term, context, source: addState.source || '',
+      id: uid(), term, context, source: addState.source || '', tweet: addState.tweet || null,
       createdAt: now(), status: 'pending', ai: null, error: null, seen: 1, srs: SRS.fresh()
     };
     await saveCard(card);
@@ -292,6 +321,8 @@ function resetAdd() {
   addState.selected.clear();
   addState.source = '';
   addState.fromShare = false;
+  addState.tweet = null;
+  addState.editing = false;
   $('#sourceLine').hidden = true;
   renderTokens();
 }
@@ -332,7 +363,15 @@ function renderReview() {
   }
 
   const a = c.ai || {};
-  const front = reviewState.mode === 'cloze'
+  const wholeTweet = c.tweet && normalizeText(c.term) === normalizeText(c.tweet.text);
+  const front = c.tweet
+    ? `<div class="mode">${reviewState.mode === 'cloze' ? 'Boşluğu doldur' : esc(typeLabel(a.type))}</div>
+       ${reviewState.mode === 'card' && !wholeTweet ? `<div class="term${c.term.length > 60 ? ' long' : ''}"><div>${esc(c.term)}${a.ipa ? `<span class="ipa">${esc(a.ipa)}</span>` : ''}</div>
+         <button class="speak" data-speak="${esc(c.term)}" aria-label="Sesli oku">🔊</button></div>` : ''}
+       ${tweetHTML(c.tweet, highlight(c.tweet.text, c.term, reviewState.mode === 'cloze'))}
+       ${reviewState.mode === 'cloze' ? `<div class="sub">İpucu: ${esc(a.meaning_tr)}</div>` : ''}
+       ${wholeTweet ? `<button class="speak" data-speak="${esc(c.term)}">🔊 Dinle</button>` : ''}`
+    : reviewState.mode === 'cloze'
     ? `<div class="mode">Boşluğu doldur</div>
        <div class="ctx">${highlight(c.context, c.term, true)}</div>
        <div class="sub">İpucu: ${esc(a.meaning_tr)}</div>`
@@ -411,7 +450,7 @@ function renderList() {
         <div class="due">${c.status === 'ready' ? esc(fmtDue(c.srs.due)) : ''}</div>
       </div>
       <div class="detail" ${openItems.has(c.id) ? '' : 'hidden'}>
-        ${c.context && c.context !== c.term ? `<div class="ctx">${highlight(c.context, c.term)}</div>` : ''}
+        ${c.tweet ? tweetHTML(c.tweet, highlight(c.tweet.text, c.term)) : c.context && c.context !== c.term ? `<div class="ctx">${highlight(c.context, c.term)}</div>` : ''}
         ${c.status === 'ready' ? detailHTML(c) : ''}
         <div class="row">
           <button class="ghost" data-act="now" data-id="${c.id}">Şimdi tekrar et</button>
@@ -439,11 +478,20 @@ function bind() {
 
   $('#addText').addEventListener('input', () => { addState.selected.clear(); renderTokens(); });
   $('#tokens').addEventListener('click', (e) => {
-    const b = e.target.closest('.tok');
+    const b = e.target.closest('.w');
     if (!b) return;
     const i = +b.dataset.i;
     addState.selected.has(i) ? addState.selected.delete(i) : addState.selected.add(i);
     renderTokens();
+  });
+  $('#editTextBtn').addEventListener('click', () => {
+    addState.editing = !addState.editing;
+    renderTokens();
+    if (addState.editing) $('#addText').focus();
+  });
+  $('#addText').addEventListener('change', () => {
+    // metin elle değiştiyse artık birebir tweet değil
+    if (addState.tweet && normalizeText($('#addText').value) !== normalizeText(addState.tweet.text)) { addState.tweet = null; renderTokens(); }
   });
   $('#clearSelBtn').addEventListener('click', () => { addState.selected.clear(); renderTokens(); });
   $('#pasteBtn').addEventListener('click', pasteFromClipboard);
@@ -616,22 +664,38 @@ function oembedJSONP(tweetUrl, ms = 7000) {
 }
 async function getTweetText(tweetUrl, id) {
   const tries = [
-    ['fxtwitter', async () => (await fetchJSON(`https://api.fxtwitter.com/status/${id}`)).tweet?.text],
-    ['vxtwitter', async () => (await fetchJSON(`https://api.vxtwitter.com/Twitter/status/${id}`)).text],
+    ['fxtwitter', async () => {
+      const t = (await fetchJSON(`https://api.fxtwitter.com/status/${id}`)).tweet;
+      return t && {
+        text: t.raw_text?.text || t.text, name: t.author?.name, handle: t.author?.screen_name,
+        avatar: t.author?.avatar_url, date: (t.created_timestamp || 0) * 1000 || Date.parse(t.created_at) || 0,
+        photos: [...(t.media?.photos || []).map((m) => m.url), ...(t.media?.videos || []).map((m) => m.thumbnail_url)].filter(Boolean),
+        url: t.url || tweetUrl
+      };
+    }],
+    ['vxtwitter', async () => {
+      const t = await fetchJSON(`https://api.vxtwitter.com/Twitter/status/${id}`);
+      return t && {
+        text: t.text, name: t.user_name, handle: t.user_screen_name, avatar: t.user_profile_image_url,
+        date: (t.date_epoch || 0) * 1000, url: t.tweetURL || tweetUrl,
+        photos: (t.media_extended || []).map((m) => (m.type === 'image' ? m.url : m.thumbnail_url)).filter(Boolean)
+      };
+    }],
     ['oembed', async () => {
       const d = await oembedJSONP(tweetUrl);
       const div = document.createElement('div');
       div.innerHTML = d.html || '';
       const p = div.querySelector('p');
       if (p) p.querySelectorAll('br').forEach((br) => br.replaceWith('\n'));
-      return p?.textContent;
+      return { text: p?.textContent, name: d.author_name, handle: (d.author_url || '').split('/').pop(), url: tweetUrl, photos: [] };
     }]
   ];
   const errs = [];
-  for (const [name, t] of tries) {
+  for (const [name, fn] of tries) {
     try {
-      const txt = cleanShared(await t());
-      if (txt) return { text: txt, errs };
+      const tw = await fn();
+      const txt = cleanShared(tw?.text);
+      if (txt) return { text: txt, tweet: { ...tw, text: txt }, errs };
       errs.push(name + ': boş');
     } catch (e) {
       errs.push(name + ': ' + (e.name === 'AbortError' ? 'zaman aşımı' : e.message || 'erişilemedi (CORS/ağ)'));
@@ -645,12 +709,13 @@ async function loadTweetText(tweetUrl, id) {
   ta.placeholder = 'Tweet metni getiriliyor…';
   diag.hidden = false;
   diag.innerHTML = 'Tweet metni getiriliyor…';
-  const { text, errs } = await getTweetText(tweetUrl, id);
+  const { text, tweet, errs } = await getTweetText(tweetUrl, id);
   ta.placeholder = 'İngilizce kelime, kalıp ya da cümle…';
   if (text) {
     diag.hidden = true;
     if (!ta.value.trim()) {
       ta.value = text;
+      addState.tweet = tweet;
       addState.selected.clear();
       renderTokens();
     }

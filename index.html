@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=5">
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
   <header class="top">
@@ -31,13 +31,14 @@
 
     <!-- EKLE / YAKALA -->
     <section id="view-add" class="view" hidden>
-      <p class="hint" id="addHint">Paylaşılan ya da yapıştırılan metin. Öğrenmek istediğin kelimelere dokun; hiçbirini seçmezsen metnin tamamı kaydedilir.</p>
+      <p class="hint" id="addHint">Paylaşılan ya da yapıştırılan metin. Öğrenmek istediğin kelimelere metnin içinde dokun (kalıp için ilk ve son kelime); hiçbirini seçmezsen metnin tamamı kaydedilir.</p>
       <textarea id="addText" rows="4" placeholder="İngilizce kelime, kalıp ya da cümle…"></textarea>
       <div class="row">
         <button id="pasteBtn" class="ghost">Panodan yapıştır</button>
         <button id="clearSelBtn" class="ghost">Seçimi temizle</button>
+        <button id="editTextBtn" class="ghost" hidden>Metni düzenle</button>
       </div>
-      <div id="tokens" class="tokens"></div>
+      <div id="tokens"></div>
       <div class="target">
         <span class="label">Öğrenilecek:</span>
         <strong id="targetPreview">—</strong>
@@ -95,6 +96,6 @@
 
   <div id="toast" class="toast" hidden></div>
 
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>
