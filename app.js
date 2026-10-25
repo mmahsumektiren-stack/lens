@@ -175,7 +175,13 @@ function cleanShared(text) {
 }
 function tokenize(text) {
   // kelimeleri noktalama olmadan, ama orijinal sırasıyla
-  return (text.match(/[A-Za-z0-9’'\-]+|[^\sA-Za-z0-9’'\-]+/g) || []).map((raw) => ({ raw, word: /[A-Za-z]/.test(raw) }));
+  // satır sonları ayrı token olarak tutulur ki X'teki düzen korunsun
+  return (text.match(/\n+|[A-Za-z0-9’'\-]+|[^\sA-Za-z0-9’'\-]+/g) || []).map((raw) =>
+    raw[0] === '\n' ? { raw, nl: true, word: false } : { raw, word: /[A-Za-z]/.test(raw) });
+}
+function normalizeText(t) {
+  // satır sonlarını koru, satır içi fazla boşlukları sadeleştir
+  return String(t).split('\n').map((l) => l.replace(/[ \t]+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 function sentenceAround(text, phrase) {
   if (!phrase || phrase === text) return text;
@@ -240,17 +246,17 @@ function renderTokens() {
   const box = $('#tokens');
   const showTokens = addState.tokens.filter((t) => t.word).length > 1;
   box.innerHTML = showTokens
-    ? addState.tokens.map((t, i) => (t.word ? `<button class="tok${addState.selected.has(i) ? ' on' : ''}" data-i="${i}">${esc(t.raw)}</button>` : '')).join('')
+    ? addState.tokens.map((t, i) => (t.nl ? '<span class="tokbr"></span>' : t.word ? `<button class="tok${addState.selected.has(i) ? ' on' : ''}" data-i="${i}">${esc(t.raw)}</button>` : '')).join('')
     : '';
   $('#targetPreview').textContent = currentTarget() || '—';
 }
 function currentTarget() {
   const text = $('#addText').value.trim();
-  if (!addState.selected.size) return text.replace(/\s+/g, ' ');
+  if (!addState.selected.size) return normalizeText(text);
   const idx = [...addState.selected].sort((a, b) => a - b);
   // ilk ve son seçili kelime arası (aradaki kelimeler dahil) — kalıp seçmek için iki uca dokunmak yeter
   return addState.tokens.slice(idx[0], idx[idx.length - 1] + 1).map((t) => t.raw).join(' ')
-    .replace(/\s+([,.!?;:])/g, '$1').trim();
+    .replace(/ ?(\n+) ?/g, '$1').replace(/ +([,.!?;:])/g, '$1').trim();
 }
 
 async function onSave() {
@@ -331,12 +337,12 @@ function renderReview() {
        <div class="ctx">${highlight(c.context, c.term, true)}</div>
        <div class="sub">İpucu: ${esc(a.meaning_tr)}</div>`
     : `<div class="mode">${esc(typeLabel(a.type))}</div>
-       <div class="term"><div>${esc(c.term)}${a.ipa ? `<span class="ipa">${esc(a.ipa)}</span>` : ''}</div>
+       <div class="term${c.term.length > 60 ? ' long' : ''}"><div>${esc(c.term)}${a.ipa ? `<span class="ipa">${esc(a.ipa)}</span>` : ''}</div>
          <button class="speak" data-speak="${esc(c.term)}" aria-label="Sesli oku">🔊</button></div>
        ${c.context && c.context !== c.term ? `<div class="ctx">${highlight(c.context, c.term)}</div>` : ''}`;
 
   const back = reviewState.revealed ? `
-    ${reviewState.mode === 'cloze' ? `<div class="term"><div>${esc(c.term)}${a.ipa ? `<span class="ipa">${esc(a.ipa)}</span>` : ''}</div>
+    ${reviewState.mode === 'cloze' ? `<div class="term${c.term.length > 60 ? ' long' : ''}"><div>${esc(c.term)}${a.ipa ? `<span class="ipa">${esc(a.ipa)}</span>` : ''}</div>
       <button class="speak" data-speak="${esc(c.context)}">🔊</button></div>` : ''}
     ${detailHTML(c)}
     <div class="grades">
