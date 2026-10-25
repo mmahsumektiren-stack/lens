@@ -227,8 +227,8 @@ async function renderLibrary() {
 /* ---------- okuyucu ---------- */
 const rd = { art: null, sel: null, extend: false, saveT: null, cache: new Map(), reading: false };
 const readPrefs = {
-  get size() { return store.get('readSize', 18); },
-  get font() { return store.get('readFont', 'serif'); },
+  get size() { return store.get('readSize', 17); },
+  get font() { return store.get('readFont', 'sans'); },
   get theme() { return store.get('readTheme', 'auto'); },
   get ox() { return store.get('oxLevel', 3); } // 0 = kapalı, 1 = A1+ … 5 = C1
 };
@@ -279,7 +279,7 @@ function renderArticle() {
   $('#readerBody').innerHTML = `
     <header class="r-head">
       <div class="r-meta">${esc(a.site)}${date ? ' · ' + esc(date) : ''} · ${a.minutes} dk</div>
-      <h1 class="r-title">${textHTML(a.title, -1)}</h1>
+      <h1 class="r-title">${textHTML(a.title = cleanTitle(a.title), -1)}</h1>
       ${a.byline ? `<div class="r-meta">${esc(a.byline)}</div>` : ''}
     </header>
     ${a.image && !a.blocks.some((x) => x.t === 'img') ? `<img class="r-img" src="${esc(a.image)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
@@ -483,12 +483,12 @@ function firstVisibleBlock() {
 /* ----- yazı ayarları ----- */
 function renderPrefs() {
   const p = $('#rPrefs');
-  const sizes = [15, 17, 18, 20, 22, 24];
+  const sizes = [15, 16, 17, 18, 20, 22];
   p.innerHTML = `
     <div class="pref"><span>Boyut</span><div class="seg">${sizes.map((s) => `<button data-size="${s}" class="${readPrefs.size === s ? 'on' : ''}" style="font-size:${Math.round(s * 0.75)}px">A</button>`).join('')}</div></div>
-    <div class="pref"><span>Yazı tipi</span><div class="seg">
-      <button data-font="serif" class="${readPrefs.font === 'serif' ? 'on' : ''}" style="font-family:Georgia,serif">Serif</button>
-      <button data-font="sans" class="${readPrefs.font === 'sans' ? 'on' : ''}">Sans</button></div></div>
+    <div class="pref"><span>Görünüm</span><div class="seg">
+      <button data-font="sans" class="${readPrefs.font === 'sans' ? 'on' : ''}">Orijinale yakın</button>
+      <button data-font="serif" class="${readPrefs.font === 'serif' ? 'on' : ''}" style="font-family:Georgia,serif">Kitap</button></div></div>
     <div class="pref"><span>Tema</span><div class="seg">
       ${[['auto', 'Oto'], ['light', 'Açık'], ['sepia', 'Sepya'], ['dark', 'Koyu']].map(([k, l]) => `<button data-theme="${k}" class="${readPrefs.theme === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
     <div class="pref"><span>Oxford vurgusu</span><div class="seg">

@@ -1,12 +1,12 @@
 // Lens Capture service worker — uygulama kabuğunu önbelleğe alır, offline açılış sağlar.
-const VERSION = 'lens-v10';
+const VERSION = 'lens-v11';
 const SHELL = [
   './',
   './index.html',
-  './styles.css?v=10',
-  './app.js?v=10',
-  './reader.js?v=10',
-  './readability.js?v=10',
+  './styles.css?v=11',
+  './app.js?v=11',
+  './reader.js?v=11',
+  './readability.js?v=11',
   './oxford.json?v=2',
   './manifest.webmanifest',
   './icon-192.png',
