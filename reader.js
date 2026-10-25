@@ -8,7 +8,10 @@ const LEVELS = ['', 'A1', 'A2', 'B1', 'B2', 'C1'];
 let OX = null;
 async function loadOxford() {
   if (OX) return OX;
-  try { OX = await (await fetch('oxford.json')).json(); } catch { OX = {}; }
+  try {
+    OX = await (await fetch('oxford.json?v=2')).json();
+    for (const k in OX) if (Array.isArray(OX[k])) OX[k] = OX[k][0]; // eski biçime karşı koruma
+  } catch { OX = {}; }
   return OX;
 }
 // basit kök bulma: tariffs → tariff, announced → announce, studies → study
@@ -329,7 +332,7 @@ async function openSheet() {
     <div class="sh-grip"></div>
     <div class="sh-top">
       <div class="sh-term">${esc(term)}</div>
-      ${ox ? `<span class="lv l${ox.level}">${LEVELS[ox.level]}</span>` : ''}
+      ${ox && LEVELS[ox.level] ? `<span class="lv l${ox.level}">${LEVELS[ox.level]}</span>` : ''}
       <button class="speak" data-speak="${esc(term)}" aria-label="Sesli oku">🔊</button>
       <button class="sh-x" id="shClose" aria-label="Kapat">✕</button>
     </div>
@@ -344,8 +347,9 @@ async function openSheet() {
   if (!settings.apiKey) return;
   const key = term.toLowerCase() + '|' + sentence;
   try {
-    let ai = rd.cache.get(key);
-    if (!ai) { ai = await askGemini(term, sentence); rd.cache.set(key, ai); }
+    let ai = rd.cache.get(key) || (inCards?.ai ?? null);
+    if (!ai) ai = await askGemini(term, sentence);
+    rd.cache.set(key, ai);
     if (!rd.sel || selectionInfo().term !== term) return; // bu arada başka kelimeye dokunuldu
     if (ai.ipa && $('.sh-ipa')) $('.sh-ipa').textContent = ai.ipa;
     $('#shBody').innerHTML = `
@@ -354,7 +358,9 @@ async function openSheet() {
       ${ai.explanation_tr ? `<p>${esc(ai.explanation_tr)}</p>` : ''}
       ${ai.context_tr ? `<p class="sh-ctx"><span class="sub">Cümle:</span> ${esc(ai.context_tr)}</p>` : ''}`;
   } catch (e) {
-    $('#shBody').innerHTML = `<div class="sub">Anlam alınamadı: ${esc(e.message)}</div>`;
+    const gt = 'https://translate.google.com/?sl=en&tl=tr&op=translate&text=' + encodeURIComponent(sentence);
+    $('#shBody').innerHTML = `<div class="sub">${esc(friendlyGeminiError(e))}</div>
+      <a class="sub" href="${gt}" target="_blank" rel="noopener">Google Çeviri'de aç ↗</a>`;
   }
 }
 function closeSheet() {
@@ -411,7 +417,7 @@ async function translateBlock(b) {
       a.trans[b] = await geminiTranslate(a.blocks[b].text);
       a.showTr[b] = true;
     } catch (e) {
-      return toast('Çeviri alınamadı: ' + e.message, 4000);
+      return toast(friendlyGeminiError(e), 5000);
     }
   }
   await saveArticle(a);
@@ -423,19 +429,8 @@ async function translateBlock(b) {
   window.scrollTo(0, y);
 }
 async function geminiTranslate(text) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(settings.model)}:generateContent`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': settings.apiKey },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: `Translate this English paragraph into natural, fluent Turkish. Keep names as they are. Return ONLY JSON {"tr": "..."}.\n\n${text}` }] }],
-      generationConfig: { responseMimeType: 'application/json', temperature: 0.2 }
-    })
-  });
-  if (!res.ok) { let m = 'HTTP ' + res.status; try { m = (await res.json()).error?.message || m; } catch {} throw new Error(m); }
-  const d = await res.json();
-  const t = d.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
-  return JSON.parse(t.replace(/^```(?:json)?\s*|\s*```$/g, '')).tr;
+  const j = await geminiJSON(`Translate this English paragraph into natural, fluent Turkish. Keep names as they are. Return ONLY JSON {"tr": "..."}.\n\n${text}`, 0.2);
+  return j.tr;
 }
 
 /* ----- sesli okuma ----- */

@@ -24,7 +24,7 @@ const store = {
 };
 const settings = {
   get apiKey() { return store.get('apiKey', ''); },
-  get model() { return store.get('model', 'gemini-2.5-flash') || 'gemini-2.5-flash'; },
+  get model() { return store.get('model', 'gemini-2.5-flash-lite') || 'gemini-2.5-flash-lite'; },
   get closeAfterSave() { return store.get('closeAfterSave', true); },
   get autoSpeak() { return store.get('autoSpeak', false); }
 };
@@ -124,27 +124,88 @@ Return ONLY JSON with exactly these keys:
 }`;
 }
 
-async function askGemini(term, context) {
+/* Gemini: kota dolunca sıradaki modele geç, yeniden açılma zamanını hatırla */
+const MODEL_CHAIN = ['gemini-2.5-flash-lite', 'gemini-flash-lite-latest', 'gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.0-flash'];
+function modelOrder() {
+  const first = settings.model;
+  return [first, ...MODEL_CHAIN.filter((m) => m !== first)];
+}
+function parseRetryMs(err) {
+  const d = (err.details || []).find((x) => /RetryInfo/.test(x['@type'] || ''));
+  const src = d?.retryDelay || (String(err.message || '').match(/retry in ([\dhms.]+)/i) || [])[1] || '';
+  let ms = 0;
+  for (const [, n, u] of src.matchAll(/([\d.]+)\s*(h|m(?!s)|s)/g)) ms += +n * (u === 'h' ? 3600e3 : u === 'm' ? 60e3 : 1e3);
+  return ms || 3600e3;
+}
+class GeminiError extends Error {
+  constructor(msg, kind, until) { super(msg); this.kind = kind; this.until = until; }
+}
+async function geminiJSON(prompt, temperature = 0.3) {
   const key = settings.apiKey;
-  if (!key) throw new Error('NO_KEY');
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(settings.model)}:generateContent`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: buildPrompt(term, context) }] }],
-      generationConfig: { responseMimeType: 'application/json', temperature: 0.3 }
-    })
-  });
-  if (!res.ok) {
-    let msg = 'HTTP ' + res.status;
-    try { msg = (await res.json()).error?.message || msg; } catch {}
-    throw new Error(msg);
+  if (!key) throw new GeminiError('NO_KEY', 'nokey');
+  const blocked = store.get('modelBlocked', {});
+  let soonest = Infinity, lastErr = null;
+  for (const model of modelOrder()) {
+    if (blocked[model] && blocked[model] > now()) { soonest = Math.min(soonest, blocked[model]); continue; }
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', temperature } })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
+      store.set('lastModel', model);
+      return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ''));
+    }
+    let err = {};
+    try { err = (await res.json()).error || {}; } catch {}
+    if (res.status === 429) {
+      blocked[model] = now() + parseRetryMs(err);
+      soonest = Math.min(soonest, blocked[model]);
+    } else if (res.status === 404 || (res.status === 400 && /not found|not supported/i.test(err.message || ''))) {
+      blocked[model] = now() + 7 * DAY; // bu model hesapta yok
+    } else if (res.status === 400 || res.status === 403) {
+      store.set('modelBlocked', blocked);
+      throw new GeminiError(err.message || 'HTTP ' + res.status, /API key/i.test(err.message || '') ? 'badkey' : 'other');
+    } else {
+      lastErr = err.message || 'HTTP ' + res.status;
+      continue;
+    }
+    store.set('modelBlocked', blocked);
   }
-  const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
-  const json = JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ''));
+  store.set('modelBlocked', blocked);
+  if (soonest < Infinity) throw new GeminiError('QUOTA', 'quota', soonest);
+  throw new GeminiError(lastErr || 'Gemini yanıt vermedi', 'other');
+}
+function friendlyGeminiError(e) {
+  if (e.kind === 'nokey' || e.message === 'NO_KEY') return 'Ayarlar’dan Gemini anahtarı ekle.';
+  if (e.kind === 'badkey') return 'Gemini anahtarı geçersiz görünüyor, Ayarlar’dan kontrol et.';
+  if (e.kind === 'quota') {
+    const ms = Math.max(0, e.until - now());
+    const h = Math.floor(ms / 3600e3), m = Math.ceil((ms % 3600e3) / 60e3);
+    return `Günlük ücretsiz Gemini kotası doldu (tüm modellerde). Yaklaşık ${h ? h + ' sa ' : ''}${m} dk sonra yenilenir.`;
+  }
+  return 'Anlam alınamadı: ' + String(e.message || '').slice(0, 140);
+}
+
+// Aynı terim + cümle için tekrar istek atma (kota dostu)
+const AI_CACHE_MAX = 400;
+function aiCacheGet(k) { return store.get('aiCache', {})[k] || null; }
+function aiCacheSet(k, v) {
+  const c = store.get('aiCache', {});
+  c[k] = v;
+  const keys = Object.keys(c);
+  if (keys.length > AI_CACHE_MAX) keys.slice(0, keys.length - AI_CACHE_MAX).forEach((x) => delete c[x]);
+  store.set('aiCache', c);
+}
+async function askGemini(term, context) {
+  const k = term.toLowerCase() + '|' + context;
+  const hit = aiCacheGet(k);
+  if (hit) return hit;
+  const json = await geminiJSON(buildPrompt(term, context));
   if (!json.meaning_tr) throw new Error('Boş yanıt');
+  aiCacheSet(k, json);
   return json;
 }
 
@@ -159,8 +220,8 @@ async function enrichPending() {
         c.status = 'ready';
         c.error = null;
       } catch (e) {
-        c.error = e.message;
-        if (/quota|429|API key|NO_KEY|403/i.test(e.message)) { await saveCard(c); break; }
+        c.error = friendlyGeminiError(e);
+        if (e.kind === 'quota' || e.kind === 'nokey' || e.kind === 'badkey') { await saveCard(c); break; }
       }
       await saveCard(c);
       refreshBadges();
@@ -573,7 +634,7 @@ function bind() {
 
   $('#saveSettings').addEventListener('click', () => {
     store.set('apiKey', $('#apiKey').value.trim());
-    store.set('model', $('#model').value.trim() || 'gemini-2.5-flash');
+    store.set('model', $('#model').value.trim() || 'gemini-2.5-flash-lite');
     store.set('closeAfterSave', $('#closeAfterSave').checked);
     store.set('autoSpeak', $('#autoSpeak').checked);
     toast('Kaydedildi');
@@ -581,13 +642,13 @@ function bind() {
   });
   $('#testKey').addEventListener('click', async () => {
     store.set('apiKey', $('#apiKey').value.trim());
-    store.set('model', $('#model').value.trim() || 'gemini-2.5-flash');
+    store.set('model', $('#model').value.trim() || 'gemini-2.5-flash-lite');
     toast('Test ediliyor…', 5000);
     try {
       const r = await askGemini('give up', 'Never give up on your side project.');
-      toast('Çalışıyor ✓ "give up" = ' + r.meaning_tr, 3500);
+      toast('Çalışıyor ✓ (' + store.get('lastModel', '') + ') "give up" = ' + r.meaning_tr, 4000);
     } catch (e) {
-      toast(e.message === 'NO_KEY' ? 'Anahtar boş' : 'Hata: ' + e.message, 5000);
+      toast(friendlyGeminiError(e), 6000);
     }
   });
 
