@@ -1,7 +1,9 @@
 /* Lens Reader — paylaşılan web sayfalarını sade okuyucuda aç, kelimeye dokun, öğren. */
 'use strict';
 
-/* ---------- Oxford 3000/5000 (seviye + IPA, offline) ---------- */
+/* ---------- Oxford 3000/5000 (resmi CEFR listeleri, offline) ----------
+   Kaynak: oxfordlearnersdictionaries.com — The Oxford 3000 / 5000 by CEFR level (PDF), © Oxford University Press.
+   oxford.json: { kelime: seviye }  1=A1 2=A2 3=B1 4=B2 5=C1 */
 const LEVELS = ['', 'A1', 'A2', 'B1', 'B2', 'C1'];
 let OX = null;
 async function loadOxford() {
@@ -27,7 +29,7 @@ function lemmaCandidates(w) {
 }
 function oxLookup(w) {
   if (!OX) return null;
-  for (const k of lemmaCandidates(w)) if (OX[k]) return { word: k, level: OX[k][0], ipa: OX[k][1] };
+  for (const k of lemmaCandidates(w)) if (OX[k]) return { word: k, level: OX[k] };
   return null;
 }
 function knownSet() {
@@ -331,7 +333,7 @@ async function openSheet() {
       <button class="speak" data-speak="${esc(term)}" aria-label="Sesli oku">🔊</button>
       <button class="sh-x" id="shClose" aria-label="Kapat">✕</button>
     </div>
-    ${ox?.ipa ? `<div class="sub">${esc(ox.ipa)}</div>` : '<div class="sub sh-ipa"></div>'}
+    <div class="sub sh-ipa"></div>
     <div id="shBody" class="sh-body"><div class="sub">${settings.apiKey ? 'Anlam getiriliyor…' : 'Anlam için Ayarlar’dan Gemini anahtarı ekle.'}</div></div>
     <div class="sh-actions">
       <button class="primary" id="shAdd">${inCards ? '✓ Kartlarında' : '＋ Kartlara ekle'}</button>
@@ -345,7 +347,7 @@ async function openSheet() {
     let ai = rd.cache.get(key);
     if (!ai) { ai = await askGemini(term, sentence); rd.cache.set(key, ai); }
     if (!rd.sel || selectionInfo().term !== term) return; // bu arada başka kelimeye dokunuldu
-    if (!ox && ai.ipa) $('.sh-ipa') && ($('.sh-ipa').textContent = ai.ipa);
+    if (ai.ipa && $('.sh-ipa')) $('.sh-ipa').textContent = ai.ipa;
     $('#shBody').innerHTML = `
       <div class="meaning">${esc(ai.meaning_tr)}</div>
       ${ai.pos ? `<div class="sub">${esc(ai.pos)}${ai.type && ai.type !== 'word' ? ' · ' + esc(typeLabel(ai.type)) : ''}</div>` : ''}

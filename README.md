@@ -55,8 +55,14 @@ Paylaş menüsü ve kurulum için site **HTTPS** üzerinden açılmalı.
 | `app.js` | Yakalama, Gemini, IndexedDB, aralıklı tekrar |
 | `reader.js` | Okuyucu, kütüphane, Oxford vurgusu |
 | `readability.js` | Mozilla Readability 0.6.0 (Apache 2.0) |
-| `oxford.json` | Oxford 3000/5000 seviye + IPA |
+| `oxford.json` | Resmi Oxford 3000/5000 CEFR listeleri (kelime → seviye) |
 | `index.html`, `styles.css` | Arayüz |
 | `icon-*.png`, `maskable-512.png` | Uygulama ikonları |
 
 Güncelleme yaptığında `sw.js` içindeki `VERSION` değerini artır (`lens-v2`), telefona yeni sürüm gelsin.
+
+## Oxford listesi kaynağı
+
+`oxford.json`, Oxford Learner's Dictionaries'in resmi PDF'lerinden üretildi:
+*The Oxford 3000 by CEFR level* ve *The Oxford 5000 by CEFR level* (© Oxford University Press).
+4.953 kelime: A1 900 · A2 793 · B1 690 · B2 1.296 · C1 1.274. Birden çok seviyede geçen kelimede en düşüğü alındı.
