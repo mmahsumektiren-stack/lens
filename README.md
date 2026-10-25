@@ -36,6 +36,16 @@ Paylaş menüsü ve kurulum için site **HTTPS** üzerinden açılmalı.
 - Offline'da da açılır ve tekrar yapılır; offline yakalananlar internet gelince karta dönüşür.
 - **Ayarlar → Dışa aktar** ile ara ara JSON yedek al.
 
+## Okuma (web sayfaları)
+
+- Chrome'da bir haberi aç → ⋮ → **Paylaş** → **Lens**. Sayfa sade okuyucuda açılır ve **Oku** sekmesine kaydedilir (offline da okunur).
+- Kelimeye dokun → alt panelde anlam, telaffuz, cümle çevirisi. **↔ Kalıp seç** → son kelimeye dokun ("shut down" gibi).
+- **¶ Çevir** paragrafın Türkçesini altına ekler, **¶ Dinle** / 🎧 sesli okur.
+- **Aa**: yazı boyutu, serif/sans, tema (oto/açık/sepya/koyu), Oxford vurgu seviyesi.
+- Altı çizili = Oxford 3000/5000 listesinde (seçtiğin seviye ve üstü), noktalı = kartlarında var.
+- Sayfa metni Jina Reader (r.jina.ai) ile, olmazsa allorigins + Mozilla Readability ile çekilir; bu servislere sadece sayfanın linki gider.
+- Sayfada metni **seçip** paylaşırsan okuyucu yerine doğrudan Ekle ekranına gelir.
+
 ## Dosyalar
 
 | Dosya | Görev |
@@ -43,6 +53,9 @@ Paylaş menüsü ve kurulum için site **HTTPS** üzerinden açılmalı.
 | `manifest.webmanifest` | Kurulum + `share_target` (Android paylaş menüsü) + kısayollar |
 | `sw.js` | Offline önbellek |
 | `app.js` | Yakalama, Gemini, IndexedDB, aralıklı tekrar |
+| `reader.js` | Okuyucu, kütüphane, Oxford vurgusu |
+| `readability.js` | Mozilla Readability 0.6.0 (Apache 2.0) |
+| `oxford.json` | Oxford 3000/5000 seviye + IPA |
 | `index.html`, `styles.css` | Arayüz |
 | `icon-*.png`, `maskable-512.png` | Uygulama ikonları |
 

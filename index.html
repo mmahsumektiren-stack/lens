@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
   <header class="top">
@@ -46,6 +46,29 @@
       <div id="sourceLine" class="source" hidden></div>
       <div id="diag" class="diag" hidden></div>
       <button id="saveBtn" class="primary big">Kaydet</button>
+    </section>
+
+    <!-- OKU (kütüphane) -->
+    <section id="view-read" class="view" hidden>
+      <div class="row lib-add">
+        <input id="libUrl" type="url" inputmode="url" placeholder="Haber ya da yazı linki yapıştır…">
+        <button id="libGo" class="primary">Getir</button>
+      </div>
+      <p class="hint">Chrome'da bir sayfayı açıp ⋮ → Paylaş → <b>Lens</b> dediğinde de buraya gelir.</p>
+      <ul id="libList" class="lib"></ul>
+    </section>
+
+    <!-- OKUYUCU -->
+    <section id="view-reader" class="view" hidden>
+      <div class="r-bar">
+        <button id="rBack" class="r-btn" aria-label="Geri">←</button>
+        <span id="readerSite" class="r-site"></span>
+        <button id="rAa" class="r-btn" aria-label="Yazı ayarları">Aa</button>
+        <button id="rListen" class="r-btn" aria-label="Sesli oku">🎧</button>
+        <div class="r-prog"><span id="rProgress"></span></div>
+      </div>
+      <div id="rPrefs" class="r-prefs" hidden></div>
+      <article id="readerBody" class="r-body"></article>
     </section>
 
     <!-- KARTLAR -->
@@ -87,8 +110,11 @@
     </section>
   </main>
 
+  <div id="sheet" class="sheet" hidden></div>
+
   <nav class="tabs">
     <button data-view="review" class="active"><span class="ico">↻</span>Tekrar<b id="dueBadge" hidden></b></button>
+    <button data-view="read"><span class="ico">📖</span>Oku</button>
     <button data-view="add"><span class="ico">＋</span>Ekle</button>
     <button data-view="list"><span class="ico">☰</span>Kartlar</button>
     <button data-view="settings"><span class="ico">⚙</span>Ayarlar</button>
@@ -96,6 +122,8 @@
 
   <div id="toast" class="toast" hidden></div>
 
-  <script src="app.js?v=6"></script>
+  <script src="readability.js?v=7"></script>
+  <script src="reader.js?v=7"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

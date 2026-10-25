@@ -1,0 +1,560 @@
+/* Lens Reader — paylaşılan web sayfalarını sade okuyucuda aç, kelimeye dokun, öğren. */
+'use strict';
+
+/* ---------- Oxford 3000/5000 (seviye + IPA, offline) ---------- */
+const LEVELS = ['', 'A1', 'A2', 'B1', 'B2', 'C1'];
+let OX = null;
+async function loadOxford() {
+  if (OX) return OX;
+  try { OX = await (await fetch('oxford.json')).json(); } catch { OX = {}; }
+  return OX;
+}
+// basit kök bulma: tariffs → tariff, announced → announce, studies → study
+function lemmaCandidates(w) {
+  w = w.toLowerCase().replace(/[’']s$/, '').replace(/[’']/g, "'");
+  const c = [w];
+  const add = (x) => x.length > 1 && !c.includes(x) && c.push(x);
+  if (w.endsWith('ies')) add(w.slice(0, -3) + 'y');
+  if (w.endsWith('es')) add(w.slice(0, -2));
+  if (w.endsWith('s') && !w.endsWith('ss')) add(w.slice(0, -1));
+  if (w.endsWith('ied')) add(w.slice(0, -3) + 'y');
+  if (w.endsWith('ed')) { add(w.slice(0, -2)); add(w.slice(0, -1)); if (/(.)\1ed$/.test(w)) add(w.slice(0, -3)); }
+  if (w.endsWith('ing')) { add(w.slice(0, -3)); add(w.slice(0, -3) + 'e'); if (/(.)\1ing$/.test(w)) add(w.slice(0, -4)); }
+  if (w.endsWith('er')) { add(w.slice(0, -2)); add(w.slice(0, -1)); }
+  if (w.endsWith('est')) { add(w.slice(0, -3)); add(w.slice(0, -2)); }
+  if (w.endsWith('ly')) { add(w.slice(0, -2)); if (w.endsWith('ily')) add(w.slice(0, -3) + 'y'); }
+  return c;
+}
+function oxLookup(w) {
+  if (!OX) return null;
+  for (const k of lemmaCandidates(w)) if (OX[k]) return { word: k, level: OX[k][0], ipa: OX[k][1] };
+  return null;
+}
+function knownSet() {
+  const set = new Set();
+  for (const c of cards) {
+    const t = c.term.trim().toLowerCase();
+    if (!/\s/.test(t)) lemmaCandidates(t).forEach((x) => set.add(x));
+  }
+  return set;
+}
+
+/* ---------- makaleyi getir ---------- */
+const READ_SVCS = [
+  ['jina', async (url) => {
+    const r = await fetchWithTimeout('https://r.jina.ai/' + url, { headers: { Accept: 'application/json' } }, 25000);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    const d = j.data || j;
+    const blocks = markdownToBlocks(d.content || '');
+    return { title: d.title, blocks, published: d.publishedTime || '', site: hostOf(d.url || url) };
+  }],
+  ['allorigins', async (url) => {
+    const r = await fetchWithTimeout('https://api.allorigins.win/raw?url=' + encodeURIComponent(url), {}, 20000);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return htmlToArticle(await r.text(), url);
+  }],
+  ['corsproxy', async (url) => {
+    const r = await fetchWithTimeout('https://corsproxy.io/?url=' + encodeURIComponent(url), {}, 20000);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return htmlToArticle(await r.text(), url);
+  }]
+];
+async function fetchWithTimeout(url, opts, ms) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), ms);
+  try { return await fetch(url, { ...opts, signal: ctl.signal }); } finally { clearTimeout(t); }
+}
+function hostOf(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } }
+
+function htmlToArticle(html, url) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const base = doc.createElement('base');
+  base.href = url;
+  doc.head.prepend(base);
+  const meta = (n) => doc.querySelector(`meta[property="${n}"],meta[name="${n}"]`)?.content || '';
+  const art = new Readability(doc).parse();
+  if (!art || !art.content) throw new Error('makale bulunamadı');
+  const box = new DOMParser().parseFromString(art.content, 'text/html').body;
+  return {
+    title: art.title || meta('og:title'),
+    byline: art.byline || '',
+    site: art.siteName || hostOf(url),
+    published: art.publishedTime || meta('article:published_time'),
+    image: absUrl(meta('og:image'), url),
+    blocks: domToBlocks(box, url)
+  };
+}
+function absUrl(u, base) { try { return u ? new URL(u, base).href : ''; } catch { return ''; } }
+function domToBlocks(root, base) {
+  const out = [];
+  const els = root.querySelectorAll('p,h1,h2,h3,h4,li,blockquote,img,figcaption,pre');
+  for (const el of els) {
+    const tag = el.tagName.toLowerCase();
+    if (tag === 'img') {
+      const src = absUrl(el.getAttribute('src') || el.getAttribute('data-src'), base);
+      if (src && !/^data:/.test(src)) out.push({ t: 'img', src });
+      continue;
+    }
+    if ((tag === 'li' || tag === 'blockquote') && el.querySelector('p')) continue;
+    if (tag === 'p' && el.closest('li,figcaption')) continue;
+    const text = el.textContent.replace(/[ \t\n]+/g, ' ').trim();
+    if (!text) continue;
+    const t = /^h[1-4]$/.test(tag) ? 'h' : tag === 'li' ? 'li' : tag === 'blockquote' ? 'q' : tag === 'figcaption' ? 'cap' : 'p';
+    out.push({ t, text });
+  }
+  return out;
+}
+function markdownToBlocks(md) {
+  const out = [];
+  const clean = (s) => s
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, '$1')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/\s+/g, ' ').trim();
+  let para = [];
+  const flush = () => { const t = clean(para.join(' ')); if (t) out.push({ t: 'p', text: t }); para = []; };
+  for (const raw of md.split('\n')) {
+    const line = raw.trim();
+    if (!line) { flush(); continue; }
+    const img = line.match(/^!\[[^\]]*\]\(([^)\s]+)/);
+    if (img) { flush(); out.push({ t: 'img', src: img[1] }); continue; }
+    if (/^#{1,6}\s/.test(line)) { flush(); const t = clean(line.replace(/^#+\s*/, '')); if (t) out.push({ t: 'h', text: t }); continue; }
+    if (/^([-*+]|\d+\.)\s+/.test(line)) { flush(); const t = clean(line.replace(/^([-*+]|\d+\.)\s+/, '')); if (t) out.push({ t: 'li', text: t }); continue; }
+    if (/^>/.test(line)) { flush(); const t = clean(line.replace(/^>+\s*/, '')); if (t) out.push({ t: 'q', text: t }); continue; }
+    if (/^(-{3,}|={3,}|\*{3,}|\|)/.test(line)) { flush(); continue; }
+    if (/^\[[^\]]*\]\([^)]*\)$/.test(line)) { flush(); continue; } // tek başına link = menü kırıntısı
+    // kısa, noktalamasız satırları ("Share", "Menu") ayrı blok yap ki ayıklansın
+    if (clean(line).split(' ').length <= 3 && !/[.!?:"”]$/.test(clean(line))) { flush(); para.push(line); flush(); continue; }
+    para.push(line);
+  }
+  flush();
+  return out;
+}
+// menü, paylaş butonları gibi kırıntıları ayıkla
+function tidyBlocks(blocks, title) {
+  const seen = new Set();
+  const norm = (s) => s.toLowerCase().replace(/\W+/g, ' ').trim();
+  const res = [];
+  for (const b of blocks) {
+    if (b.t === 'img') { if (!seen.has(b.src)) { seen.add(b.src); res.push(b); } continue; }
+    const n = norm(b.text);
+    if (!n || seen.has(n)) continue;
+    if (title && n === norm(title)) continue;
+    if (b.t !== 'h' && b.text.split(' ').length < 4 && !/[.!?:]$/.test(b.text)) continue; // "Share", "Menu" vb.
+    seen.add(n);
+    res.push(b);
+  }
+  return res;
+}
+
+let articles = [];
+async function loadArticles() { try { articles = (await DB.all('articles')) || []; } catch { articles = []; } }
+async function saveArticle(a) {
+  await DB.put(a, 'articles');
+  const i = articles.findIndex((x) => x.id === a.id);
+  if (i >= 0) articles[i] = a; else articles.push(a);
+}
+function normUrl(u) { try { const x = new URL(u); x.hash = ''; ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'fbclid', 'gclid'].forEach((k) => x.searchParams.delete(k)); return x.href; } catch { return u; } }
+
+async function importArticle(url, titleHint = '') {
+  url = normUrl(url);
+  await loadArticles();
+  const existing = articles.find((a) => a.url === url);
+  if (existing) return openArticle(existing.id);
+  show('reader');
+  const host = $('#readerBody');
+  $('#readerSite').textContent = hostOf(url);
+  host.innerHTML = `<div class="r-loading"><div class="spinner"></div><p>Sayfa sadeleştiriliyor…</p><p class="sub">${esc(titleHint || url)}</p></div>`;
+  const errs = [];
+  for (const [name, fn] of READ_SVCS) {
+    try {
+      const a = await fn(url);
+      const blocks = tidyBlocks(a.blocks || [], a.title);
+      const words = blocks.filter((b) => b.text).reduce((n, b) => n + b.text.split(/\s+/).length, 0);
+      if (words < 40) { errs.push(name + ': metin çok kısa'); continue; }
+      const art = {
+        id: uid(), url, title: a.title || titleHint || hostOf(url), site: a.site || hostOf(url), byline: a.byline || '',
+        published: a.published || '', image: a.image || blocks.find((x) => x.t === 'img')?.src || '', blocks, words, minutes: Math.max(1, Math.round(words / 200)),
+        createdAt: now(), progress: 0, scrollY: 0, trans: {}, via: name
+      };
+      await saveArticle(art);
+      return openArticle(art.id);
+    } catch (e) {
+      errs.push(name + ': ' + (e.name === 'AbortError' ? 'zaman aşımı' : e.message || 'erişilemedi'));
+    }
+  }
+  host.innerHTML = `<div class="r-loading"><p>Bu sayfa getirilemedi.</p><p class="sub">${esc(errs.join(' · '))}</p>
+    <div class="row" style="justify-content:center"><button class="ghost" id="rRetry">Tekrar dene</button>
+    <a class="ghost" href="${esc(url)}" target="_blank" rel="noopener" style="text-decoration:none;padding:11px 16px">Sayfayı aç ↗</a></div>
+    <p class="sub">İpucu: Sayfada metni seçip Paylaş → Lens dersen o kısım doğrudan eklenir.</p></div>`;
+  $('#rRetry').onclick = () => importArticle(url, titleHint);
+}
+
+/* ---------- kütüphane ---------- */
+async function renderLibrary() {
+  await loadArticles();
+  const list = articles.slice().sort((a, b) => (b.lastOpened || b.createdAt) - (a.lastOpened || a.createdAt));
+  $('#libList').innerHTML = list.length ? list.map((a) => `
+    <li class="lib-item" data-open="${a.id}">
+      ${a.image ? `<img src="${esc(a.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
+      <div class="lib-txt">
+        <div class="lib-title">${esc(a.title)}</div>
+        <div class="sub">${esc(a.site)} · ${a.minutes} dk${a.progress > 0.97 ? ' · bitti ✓' : a.progress > 0.02 ? ` · %${Math.round(a.progress * 100)}` : ''}</div>
+        <div class="lib-bar"><span style="width:${Math.round((a.progress || 0) * 100)}%"></span></div>
+      </div>
+      <button class="lib-del" data-del="${a.id}" aria-label="Sil">✕</button>
+    </li>`).join('') : `<div class="empty"><span class="big-ico">📰</span>Henüz yazı yok. Chrome'da bir haberi açıp ⋮ → Paylaş → <b>Lens</b> de, ya da linki yukarıya yapıştır.</div>`;
+}
+
+/* ---------- okuyucu ---------- */
+const rd = { art: null, sel: null, extend: false, saveT: null, cache: new Map(), reading: false };
+const readPrefs = {
+  get size() { return store.get('readSize', 18); },
+  get font() { return store.get('readFont', 'serif'); },
+  get theme() { return store.get('readTheme', 'auto'); },
+  get ox() { return store.get('oxLevel', 3); } // 0 = kapalı, 1 = A1+ … 5 = C1
+};
+
+function applyReadPrefs() {
+  const v = $('#view-reader');
+  v.style.setProperty('--r-size', readPrefs.size + 'px');
+  v.dataset.font = readPrefs.font;
+  v.dataset.theme = readPrefs.theme;
+}
+
+async function openArticle(id) {
+  await loadOxford();
+  if (!articles.length) await loadArticles();
+  const a = articles.find((x) => x.id === id);
+  if (!a) return show('read');
+  rd.art = a;
+  rd.sel = null;
+  a.lastOpened = now();
+  saveArticle(a);
+  show('reader');
+  if (history.state?.reader !== a.id) history.pushState({ reader: a.id }, '');
+  applyReadPrefs();
+  $('#readerSite').textContent = a.site;
+  renderArticle();
+  requestAnimationFrame(() => window.scrollTo(0, a.scrollY || 0));
+}
+
+function renderArticle() {
+  const a = rd.art;
+  const known = knownSet();
+  const min = readPrefs.ox;
+  const date = a.published && !isNaN(Date.parse(a.published)) ? new Date(a.published).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+  const wordSpan = (raw, b, i) => {
+    let cls = 'w';
+    const lw = raw.toLowerCase();
+    if (lemmaCandidates(lw).some((k) => known.has(k))) cls += ' kn';
+    else if (min) { const o = oxLookup(lw); if (o && o.level >= min) cls += ' ox l' + o.level; }
+    return `<span class="${cls}" data-b="${b}" data-i="${i}">${esc(raw)}</span>`;
+  };
+  const textHTML = (text, b) => tokenize(text).map((t, i) => (t.word ? wordSpan(t.raw, b, i) : esc(t.raw))).join('');
+  const parts = a.blocks.map((bl, b) => {
+    if (bl.t === 'img') return `<img class="r-img" src="${esc(bl.src)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`;
+    const tag = { h: 'h2', li: 'li', q: 'blockquote', cap: 'p', p: 'p' }[bl.t] || 'p';
+    const tr = a.trans?.[b] && a.showTr?.[b] ? `<div class="r-tr" data-trof="${b}">${esc(a.trans[b])}</div>` : '';
+    return `<${tag} class="rb rb-${bl.t}" data-block="${b}">${textHTML(bl.text, b)}</${tag}>${tr}`;
+  });
+  $('#readerBody').innerHTML = `
+    <header class="r-head">
+      <div class="r-meta">${esc(a.site)}${date ? ' · ' + esc(date) : ''} · ${a.minutes} dk</div>
+      <h1 class="r-title">${textHTML(a.title, -1)}</h1>
+      ${a.byline ? `<div class="r-meta">${esc(a.byline)}</div>` : ''}
+    </header>
+    ${a.image && !a.blocks.some((x) => x.t === 'img') ? `<img class="r-img" src="${esc(a.image)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
+    <div class="r-text">${parts.join('')}</div>
+    <footer class="r-end"><a href="${esc(a.url)}" target="_blank" rel="noopener">Orijinal sayfa ↗</a></footer>`;
+  if (rd.sel) markSelection();
+}
+
+function blockText(b) { return b === -1 ? rd.art.title : rd.art.blocks[b].text; }
+
+function markSelection() {
+  $$('#readerBody .w.sel').forEach((x) => x.classList.remove('sel'));
+  if (!rd.sel) return;
+  const { b, i0, i1 } = rd.sel;
+  $$(`#readerBody .w[data-b="${b}"]`).forEach((x) => { const i = +x.dataset.i; if (i >= i0 && i <= i1) x.classList.add('sel'); });
+}
+
+function selectionInfo() {
+  const { b, i0, i1 } = rd.sel;
+  const toks = tokenize(blockText(b));
+  const term = normalizeText(toks.slice(i0, i1 + 1).map((t) => t.raw).join(''));
+  const start = toks.slice(0, i0).reduce((n, t) => n + t.raw.length, 0);
+  const end = start + term.length;
+  const text = blockText(b);
+  // terimi içeren cümle
+  let s = 0, e = text.length;
+  const re = /[.!?…]["”’)]?\s+/g;
+  let m;
+  while ((m = re.exec(text))) {
+    const pos = m.index + m[0].length;
+    if (pos <= start) s = pos; else if (m.index >= end) { e = m.index + m[0].trimEnd().length; break; }
+  }
+  return { term, sentence: text.slice(s, e).trim() };
+}
+
+function onReaderTap(e) {
+  const w = e.target.closest('.w');
+  if (!w) { if (!e.target.closest('#sheet')) closeSheet(); return; }
+  const b = +w.dataset.b, i = +w.dataset.i;
+  if (rd.extend && rd.sel && rd.sel.b === b) {
+    rd.sel = { b, i0: Math.min(rd.sel.i0, i), i1: Math.max(rd.sel.i1, i) };
+    rd.extend = false;
+  } else {
+    rd.sel = { b, i0: i, i1: i };
+    rd.extend = false;
+  }
+  markSelection();
+  openSheet();
+}
+
+/* ----- alt panel ----- */
+async function openSheet() {
+  const { term, sentence } = selectionInfo();
+  const single = !/\s/.test(term);
+  const ox = single ? oxLookup(term) : null;
+  const inCards = cards.find((c) => c.term.toLowerCase() === term.toLowerCase());
+  const sh = $('#sheet');
+  sh.hidden = false;
+  document.body.classList.add('sheet-open');
+  sh.innerHTML = `
+    <div class="sh-grip"></div>
+    <div class="sh-top">
+      <div class="sh-term">${esc(term)}</div>
+      ${ox ? `<span class="lv l${ox.level}">${LEVELS[ox.level]}</span>` : ''}
+      <button class="speak" data-speak="${esc(term)}" aria-label="Sesli oku">🔊</button>
+      <button class="sh-x" id="shClose" aria-label="Kapat">✕</button>
+    </div>
+    ${ox?.ipa ? `<div class="sub">${esc(ox.ipa)}</div>` : '<div class="sub sh-ipa"></div>'}
+    <div id="shBody" class="sh-body"><div class="sub">${settings.apiKey ? 'Anlam getiriliyor…' : 'Anlam için Ayarlar’dan Gemini anahtarı ekle.'}</div></div>
+    <div class="sh-actions">
+      <button class="primary" id="shAdd">${inCards ? '✓ Kartlarında' : '＋ Kartlara ekle'}</button>
+      <button class="ghost${rd.extend ? ' on' : ''}" id="shExt">↔ Kalıp seç</button>
+      <button class="ghost" id="shTr">¶ Çevir</button>
+      <button class="ghost" id="shRead">¶ Dinle</button>
+    </div>`;
+  if (!settings.apiKey) return;
+  const key = term.toLowerCase() + '|' + sentence;
+  try {
+    let ai = rd.cache.get(key);
+    if (!ai) { ai = await askGemini(term, sentence); rd.cache.set(key, ai); }
+    if (!rd.sel || selectionInfo().term !== term) return; // bu arada başka kelimeye dokunuldu
+    if (!ox && ai.ipa) $('.sh-ipa') && ($('.sh-ipa').textContent = ai.ipa);
+    $('#shBody').innerHTML = `
+      <div class="meaning">${esc(ai.meaning_tr)}</div>
+      ${ai.pos ? `<div class="sub">${esc(ai.pos)}${ai.type && ai.type !== 'word' ? ' · ' + esc(typeLabel(ai.type)) : ''}</div>` : ''}
+      ${ai.explanation_tr ? `<p>${esc(ai.explanation_tr)}</p>` : ''}
+      ${ai.context_tr ? `<p class="sh-ctx"><span class="sub">Cümle:</span> ${esc(ai.context_tr)}</p>` : ''}`;
+  } catch (e) {
+    $('#shBody').innerHTML = `<div class="sub">Anlam alınamadı: ${esc(e.message)}</div>`;
+  }
+}
+function closeSheet() {
+  const sh = $('#sheet');
+  if (!sh || sh.hidden) return;
+  sh.hidden = true;
+  document.body.classList.remove('sheet-open');
+  rd.sel = null;
+  rd.extend = false;
+  markSelection();
+}
+
+async function addSelectionToCards() {
+  const { term, sentence } = selectionInfo();
+  const a = rd.art;
+  const dup = cards.find((c) => c.term.toLowerCase() === term.toLowerCase());
+  if (dup) {
+    dup.srs.due = Math.min(dup.srs.due, now());
+    dup.seen = (dup.seen || 1) + 1;
+    await saveCard(dup);
+    toast('Zaten vardı, tekrara öne alındı');
+  } else {
+    const ai = rd.cache.get(term.toLowerCase() + '|' + sentence) || null;
+    await saveCard({
+      id: uid(), term, context: sentence, source: a.url, tweet: null,
+      article: { id: a.id, title: a.title, site: a.site },
+      createdAt: now(), status: ai ? 'ready' : 'pending', ai, error: null, seen: 1, srs: SRS.fresh()
+    });
+    toast('Kartlara eklendi');
+    if (!ai) enrichPending();
+  }
+  refreshBadges();
+  const y = window.scrollY;
+  const sel = rd.sel;
+  renderArticle();
+  rd.sel = sel;
+  markSelection();
+  window.scrollTo(0, y);
+  const btn = $('#shAdd');
+  if (btn) btn.textContent = '✓ Kartlarında';
+}
+
+async function translateBlock(b) {
+  const a = rd.art;
+  if (b < 0) return toast('Başlık çevirisi için bir paragraftaki kelimeye dokun');
+  a.showTr = a.showTr || {};
+  if (a.trans?.[b]) {
+    a.showTr[b] = !a.showTr[b];
+  } else {
+    if (!settings.apiKey) return toast('Çeviri için Ayarlar’dan Gemini anahtarı ekle');
+    toast('Çevriliyor…', 4000);
+    try {
+      a.trans = a.trans || {};
+      a.trans[b] = await geminiTranslate(a.blocks[b].text);
+      a.showTr[b] = true;
+    } catch (e) {
+      return toast('Çeviri alınamadı: ' + e.message, 4000);
+    }
+  }
+  await saveArticle(a);
+  const y = window.scrollY;
+  const sel = rd.sel;
+  renderArticle();
+  rd.sel = sel;
+  markSelection();
+  window.scrollTo(0, y);
+}
+async function geminiTranslate(text) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(settings.model)}:generateContent`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': settings.apiKey },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: `Translate this English paragraph into natural, fluent Turkish. Keep names as they are. Return ONLY JSON {"tr": "..."}.\n\n${text}` }] }],
+      generationConfig: { responseMimeType: 'application/json', temperature: 0.2 }
+    })
+  });
+  if (!res.ok) { let m = 'HTTP ' + res.status; try { m = (await res.json()).error?.message || m; } catch {} throw new Error(m); }
+  const d = await res.json();
+  const t = d.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
+  return JSON.parse(t.replace(/^```(?:json)?\s*|\s*```$/g, '')).tr;
+}
+
+/* ----- sesli okuma ----- */
+function readBlocksFrom(b) {
+  stopReadAloud();
+  if (!('speechSynthesis' in window)) return toast('Bu tarayıcıda sesli okuma yok');
+  rd.reading = true;
+  $('#rListen').textContent = '⏹';
+  const step = (i) => {
+    const blocks = rd.art.blocks;
+    while (i < blocks.length && !blocks[i].text) i++;
+    if (!rd.reading || i >= blocks.length) return stopReadAloud();
+    $$('#readerBody .rb.reading').forEach((x) => x.classList.remove('reading'));
+    const el = $(`#readerBody .rb[data-block="${i}"]`);
+    if (el) { el.classList.add('reading'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+    const u = new SpeechSynthesisUtterance(blocks[i].text);
+    u.lang = 'en-US';
+    u.rate = 0.95;
+    const v = speechSynthesis.getVoices().find((x) => /^en[-_]US/i.test(x.lang));
+    if (v) u.voice = v;
+    u.onend = () => rd.reading && step(i + 1);
+    speechSynthesis.speak(u);
+  };
+  step(Math.max(0, b));
+}
+function stopReadAloud() {
+  rd.reading = false;
+  if ('speechSynthesis' in window) speechSynthesis.cancel();
+  $$('#readerBody .rb.reading').forEach((x) => x.classList.remove('reading'));
+  const btn = $('#rListen');
+  if (btn) btn.textContent = '🎧';
+}
+function firstVisibleBlock() {
+  const els = $$('#readerBody .rb');
+  const el = els.find((x) => x.getBoundingClientRect().bottom > 70);
+  return el ? +el.dataset.block : 0;
+}
+
+/* ----- yazı ayarları ----- */
+function renderPrefs() {
+  const p = $('#rPrefs');
+  const sizes = [15, 17, 18, 20, 22, 24];
+  p.innerHTML = `
+    <div class="pref"><span>Boyut</span><div class="seg">${sizes.map((s) => `<button data-size="${s}" class="${readPrefs.size === s ? 'on' : ''}" style="font-size:${Math.round(s * 0.75)}px">A</button>`).join('')}</div></div>
+    <div class="pref"><span>Yazı tipi</span><div class="seg">
+      <button data-font="serif" class="${readPrefs.font === 'serif' ? 'on' : ''}" style="font-family:Georgia,serif">Serif</button>
+      <button data-font="sans" class="${readPrefs.font === 'sans' ? 'on' : ''}">Sans</button></div></div>
+    <div class="pref"><span>Tema</span><div class="seg">
+      ${[['auto', 'Oto'], ['light', 'Açık'], ['sepia', 'Sepya'], ['dark', 'Koyu']].map(([k, l]) => `<button data-theme="${k}" class="${readPrefs.theme === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+    <div class="pref"><span>Oxford vurgusu</span><div class="seg">
+      ${[[0, 'Kapalı'], [1, 'Hepsi'], [2, 'A2+'], [3, 'B1+'], [4, 'B2+'], [5, 'C1']].map(([k, l]) => `<button data-ox="${k}" class="${readPrefs.ox === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+    <div class="legend"><span class="w ox l3">altı çizili</span> Oxford listesinde · <span class="w kn">noktalı</span> kartlarında var</div>`;
+}
+
+function bindReader() {
+  $('#readerBody').addEventListener('click', onReaderTap);
+  $('#sheet').addEventListener('click', (e) => {
+    const sp = e.target.closest('[data-speak]');
+    if (sp) return speak(sp.dataset.speak);
+    if (e.target.closest('#shClose')) return closeSheet();
+    if (e.target.closest('#shAdd')) return addSelectionToCards();
+    if (e.target.closest('#shExt')) {
+      rd.extend = !rd.extend;
+      e.target.closest('#shExt').classList.toggle('on', rd.extend);
+      if (rd.extend) toast('Kalıbın son kelimesine dokun');
+      return;
+    }
+    if (e.target.closest('#shTr')) return rd.sel && translateBlock(rd.sel.b);
+    if (e.target.closest('#shRead')) return rd.sel && (rd.sel.b < 0 ? speak(rd.art.title) : readBlocksFrom(rd.sel.b));
+  });
+  $('#rBack').addEventListener('click', () => (history.state?.reader ? history.back() : show('read')));
+  $('#rListen').addEventListener('click', () => (rd.reading ? stopReadAloud() : readBlocksFrom(firstVisibleBlock())));
+  $('#rAa').addEventListener('click', () => {
+    const p = $('#rPrefs');
+    p.hidden = !p.hidden;
+    if (!p.hidden) renderPrefs();
+  });
+  $('#rPrefs').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.size) store.set('readSize', +b.dataset.size);
+    if (b.dataset.font) store.set('readFont', b.dataset.font);
+    if (b.dataset.theme) store.set('readTheme', b.dataset.theme);
+    if (b.dataset.ox) store.set('oxLevel', +b.dataset.ox);
+    applyReadPrefs();
+    renderPrefs();
+    if (b.dataset.ox) renderArticle();
+  });
+  window.addEventListener('scroll', () => {
+    if (currentView !== 'reader' || !rd.art) return;
+    const h = document.documentElement.scrollHeight - innerHeight;
+    const pr = h > 0 ? Math.min(1, scrollY / h) : 1;
+    $('#rProgress').style.width = Math.round(pr * 100) + '%';
+    clearTimeout(rd.saveT);
+    rd.saveT = setTimeout(() => {
+      rd.art.scrollY = scrollY;
+      rd.art.progress = Math.max(rd.art.progress || 0, pr);
+      saveArticle(rd.art);
+    }, 700);
+  }, { passive: true });
+
+  // Android geri tuşu: okuyucudan kütüphaneye dön
+  window.addEventListener('popstate', () => { if (currentView === 'reader') show('read'); });
+
+  // kütüphane
+  $('#libList').addEventListener('click', async (e) => {
+    const del = e.target.closest('[data-del]');
+    if (del) {
+      e.stopPropagation();
+      const a = articles.find((x) => x.id === del.dataset.del);
+      if (a && confirm(`"${a.title}" silinsin mi?`)) { await DB.del(a.id, 'articles'); renderLibrary(); }
+      return;
+    }
+    const it = e.target.closest('[data-open]');
+    if (it) openArticle(it.dataset.open);
+  });
+  $('#libGo').addEventListener('click', () => {
+    const v = $('#libUrl').value.trim();
+    const m = v.match(/https?:\/\/\S+/);
+    if (!m) return toast('Geçerli bir link yapıştır');
+    $('#libUrl').value = '';
+    importArticle(m[0]);
+  });
+}

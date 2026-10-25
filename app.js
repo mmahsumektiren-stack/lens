@@ -35,24 +35,28 @@ const DB = {
   open() {
     if (this._db) return Promise.resolve(this._db);
     return new Promise((res, rej) => {
-      const r = indexedDB.open('lens-capture', 1);
-      r.onupgradeneeded = () => r.result.createObjectStore('cards', { keyPath: 'id' });
+      const r = indexedDB.open('lens-capture', 2);
+      r.onupgradeneeded = () => {
+        const db = r.result;
+        if (!db.objectStoreNames.contains('cards')) db.createObjectStore('cards', { keyPath: 'id' });
+        if (!db.objectStoreNames.contains('articles')) db.createObjectStore('articles', { keyPath: 'id' });
+      };
       r.onsuccess = () => res((this._db = r.result));
       r.onerror = () => rej(r.error);
     });
   },
-  async tx(mode, fn) {
+  async tx(mode, fn, store = 'cards') {
     const db = await this.open();
     return new Promise((res, rej) => {
-      const t = db.transaction('cards', mode);
-      const out = fn(t.objectStore('cards'));
+      const t = db.transaction(store, mode);
+      const out = fn(t.objectStore(store));
       t.oncomplete = () => res(out && 'result' in out ? out.result : undefined);
       t.onerror = () => rej(t.error);
     });
   },
-  all() { return this.tx('readonly', (s) => s.getAll()); },
-  put(c) { return this.tx('readwrite', (s) => s.put(c)); },
-  del(id) { return this.tx('readwrite', (s) => s.delete(id)); }
+  all(store = 'cards') { return this.tx('readonly', (s) => s.getAll(), store); },
+  put(c, store = 'cards') { return this.tx('readwrite', (s) => s.put(c), store); },
+  del(id, store = 'cards') { return this.tx('readwrite', (s) => s.delete(id), store); }
 };
 
 let cards = [];
@@ -212,12 +216,15 @@ function speak(text) {
 
 /* ---------- görünümler ---------- */
 let currentView = 'review';
-const TITLES = { review: 'Tekrar', add: 'Ekle', list: 'Kartlar', settings: 'Ayarlar' };
+const TITLES = { review: 'Tekrar', read: 'Oku', add: 'Ekle', list: 'Kartlar', settings: 'Ayarlar', reader: '' };
 function show(view) {
   currentView = view;
   $$('.view').forEach((v) => (v.hidden = v.id !== 'view-' + view));
   $$('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
   $('#title').textContent = TITLES[view];
+  document.body.classList.toggle('reading', view === 'reader');
+  if (view !== 'reader' && typeof closeSheet === 'function') { closeSheet(); stopReadAloud(); }
+  if (view === 'read') renderLibrary();
   if (view === 'review') renderReview();
   if (view === 'list') renderList();
   if (view === 'settings') renderSettings();
@@ -404,7 +411,7 @@ function detailHTML(c) {
     ${(a.examples || []).length ? `<div class="block"><div class="sub">Örnekler</div>${a.examples.map((x) =>
       `<div class="ex"><div>${esc(x.en)} <button class="speak" data-speak="${esc(x.en)}">🔊</button></div><div class="tr">${esc(x.tr)}</div></div>`).join('')}</div>` : ''}
     ${(a.synonyms || []).length ? `<div class="chips">${a.synonyms.map((s) => `<span class="chip">${esc(s)}</span>`).join('')}</div>` : ''}
-    ${c.source ? `<a class="sub" href="${esc(c.source)}" target="_blank" rel="noopener">Kaynağa git ↗</a>` : ''}`;
+    ${c.source ? `<a class="sub" href="${esc(c.source)}" target="_blank" rel="noopener">${c.article ? '📰 ' + esc(c.article.title) + ' — ' + esc(c.article.site) : 'Kaynağa git'} ↗</a>` : ''}`;
 }
 
 function typeLabel(t) {
@@ -752,10 +759,15 @@ function handleLaunchParams() {
   const url = p.get('url') || '';
   const linkInText = (text.match(URL_RE) || [])[0] || '';
   if (text || title || url) store.set('lastShare', { text, title, url, at: new Date().toISOString() });
-  const body = cleanShared(text) || cleanShared(title);
-
   const source = url || linkInText;
   const tweetId = (source.match(/(?:x|twitter)\.com\/[^/]+\/status\/(\d+)/i) || [])[1];
+  // Bir web sayfasının kendisi paylaşıldıysa (seçili metin yok, sadece link): okuyucuya aktar
+  if (!cleanShared(text) && source && !tweetId) {
+    history.replaceState(null, '', location.pathname);
+    importArticle(source, cleanShared(title));
+    return;
+  }
+  const body = cleanShared(text) || (tweetId ? '' : cleanShared(title));
 
   if (body || tweetId) {
     addState.fromShare = true;
@@ -790,6 +802,7 @@ function handleLaunchParams() {
 /* ---------- başlat ---------- */
 (async function init() {
   bind();
+  bindReader();
   $('#netBadge').hidden = navigator.onLine;
   try {
     await loadCards();
