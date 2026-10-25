@@ -70,6 +70,15 @@ async function fetchWithTimeout(url, opts, ms) {
   const t = setTimeout(() => ctl.abort(), ms);
   try { return await fetch(url, { ...opts, signal: ctl.signal }); } finally { clearTimeout(t); }
 }
+function cleanTitle(t, site) {
+  t = String(t || '').trim();
+  const parts = t.split(/\s+[|–—]\s+/);
+  if (parts.length > 1) {
+    // en uzun parça genelde asıl başlıktır
+    t = parts.reduce((a, b) => (b.length > a.length ? b : a));
+  }
+  return t;
+}
 function hostOf(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } }
 
 function htmlToArticle(html, url) {
@@ -117,6 +126,8 @@ function markdownToBlocks(md) {
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/[*_]{1,3}([^*_]+)[*_]{1,3}/g, '$1')
     .replace(/`([^`]*)`/g, '$1')
+    .replace(/<https?:[^>]+>/g, '')
+    .replace(/https?:\/\/\S+/g, '')
     .replace(/\s+/g, ' ').trim();
   let para = [];
   const flush = () => { const t = clean(para.join(' ')); if (t) out.push({ t: 'p', text: t }); para = []; };
@@ -180,7 +191,7 @@ async function importArticle(url, titleHint = '') {
       const words = blocks.filter((b) => b.text).reduce((n, b) => n + b.text.split(/\s+/).length, 0);
       if (words < 40) { errs.push(name + ': metin çok kısa'); continue; }
       const art = {
-        id: uid(), url, title: a.title || titleHint || hostOf(url), site: a.site || hostOf(url), byline: a.byline || '',
+        id: uid(), url, title: cleanTitle(a.title || titleHint, a.site) || hostOf(url), site: a.site || hostOf(url), byline: a.byline || '',
         published: a.published || '', image: a.image || blocks.find((x) => x.t === 'img')?.src || '', blocks, words, minutes: Math.max(1, Math.round(words / 200)),
         createdAt: now(), progress: 0, scrollY: 0, trans: {}, via: name
       };

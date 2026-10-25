@@ -289,3 +289,12 @@ body.sheet-open .r-body { padding-bottom: 60dvh; }
 .sh-actions .primary { grid-column: 1 / -1; }
 .sh-actions button { padding: 11px 8px; }
 .sh-actions .ghost.on { background: var(--easy); color: #fff; }
+
+/* Okuyucu taşma koruması: hiçbir içerik ekranı genişletemesin */
+html, body { overflow-x: hidden; }
+@supports (overflow: clip) { html, body { overflow-x: clip; } }
+#view-reader, .r-body, .r-text, .sheet { max-width: 100vw; }
+.r-body { overflow-wrap: anywhere; word-break: break-word; }
+.r-body img, .r-body video, .r-body iframe, .r-body table { max-width: 100%; height: auto; }
+.r-text pre { white-space: pre-wrap; }
+.r-bar { width: 100%; }
