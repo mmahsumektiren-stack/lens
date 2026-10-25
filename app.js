@@ -610,36 +610,49 @@ function oembedJSONP(tweetUrl, ms = 7000) {
 }
 async function getTweetText(tweetUrl, id) {
   const tries = [
-    async () => (await fetchJSON(`https://api.fxtwitter.com/status/${id}`)).tweet?.text,
-    async () => (await fetchJSON(`https://api.vxtwitter.com/Twitter/status/${id}`)).text,
-    async () => {
+    ['fxtwitter', async () => (await fetchJSON(`https://api.fxtwitter.com/status/${id}`)).tweet?.text],
+    ['vxtwitter', async () => (await fetchJSON(`https://api.vxtwitter.com/Twitter/status/${id}`)).text],
+    ['oembed', async () => {
       const d = await oembedJSONP(tweetUrl);
       const div = document.createElement('div');
       div.innerHTML = d.html || '';
       const p = div.querySelector('p');
       if (p) p.querySelectorAll('br').forEach((br) => br.replaceWith('\n'));
       return p?.textContent;
-    }
+    }]
   ];
-  for (const t of tries) {
+  const errs = [];
+  for (const [name, t] of tries) {
     try {
       const txt = cleanShared(await t());
-      if (txt) return txt;
-    } catch {}
+      if (txt) return { text: txt, errs };
+      errs.push(name + ': boş');
+    } catch (e) {
+      errs.push(name + ': ' + (e.name === 'AbortError' ? 'zaman aşımı' : e.message || 'erişilemedi (CORS/ağ)'));
+    }
   }
-  return '';
+  return { text: '', errs };
 }
 async function loadTweetText(tweetUrl, id) {
   const ta = $('#addText');
+  const diag = $('#diag');
   ta.placeholder = 'Tweet metni getiriliyor…';
-  const txt = await getTweetText(tweetUrl, id);
+  diag.hidden = false;
+  diag.innerHTML = 'Tweet metni getiriliyor…';
+  const { text, errs } = await getTweetText(tweetUrl, id);
   ta.placeholder = 'İngilizce kelime, kalıp ya da cümle…';
-  if (txt && !ta.value.trim()) {
-    ta.value = txt;
-    addState.selected.clear();
-    renderTokens();
-  } else if (!txt) {
-    toast('Tweet metni alınamadı — metni kopyalayıp “Panodan yapıştır”a bas', 4000);
+  if (text) {
+    diag.hidden = true;
+    if (!ta.value.trim()) {
+      ta.value = text;
+      addState.selected.clear();
+      renderTokens();
+    }
+  } else {
+    diag.innerHTML = `Tweet metni alınamadı.<br><small>${esc(errs.join(' · '))}</small><br>
+      <button class="ghost" id="retryTweet">Tekrar dene</button> <button class="ghost" id="pasteInstead">Panodan yapıştır</button>`;
+    $('#retryTweet').onclick = () => loadTweetText(tweetUrl, id);
+    $('#pasteInstead').onclick = pasteFromClipboard;
   }
 }
 
@@ -667,6 +680,7 @@ function handleLaunchParams() {
   const title = p.get('title') || '';
   const url = p.get('url') || '';
   const linkInText = (text.match(URL_RE) || [])[0] || '';
+  if (text || title || url) store.set('lastShare', { text, title, url, at: new Date().toISOString() });
   const body = cleanShared(text) || cleanShared(title);
 
   const source = url || linkInText;
@@ -682,6 +696,14 @@ function handleLaunchParams() {
     show('add');
     // X'in paylaş düğmesi sadece link gönderir → tweet metnini kendimiz çekiyoruz
     if (!body && tweetId) loadTweetText(source, tweetId);
+    return;
+  }
+  if (text || title || url) {
+    // tanımadığımız bir paylaşım biçimi: gelen ham veriyi göster
+    history.replaceState(null, '', location.pathname);
+    show('add');
+    $('#diag').hidden = false;
+    $('#diag').innerHTML = `Paylaşımda metin bulunamadı.<br><small>${esc(JSON.stringify({ text, title, url }))}</small>`;
     return;
   }
   const view = p.get('view');

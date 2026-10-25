@@ -162,3 +162,8 @@ button { cursor: pointer; border: 0; border-radius: var(--radius); padding: 11px
 .clipbanner small { display: block; color: var(--muted); font-size: 12px; }
 .clipbanner span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .clipbanner button { padding: 9px 12px; }
+
+.diag { background: var(--surface-2); border-radius: var(--radius); padding: 10px 12px; font-size: 14px; }
+.diag[hidden] { display: none; }
+.diag small { color: var(--muted); word-break: break-word; }
+.diag button { margin-top: 8px; padding: 8px 12px; }
