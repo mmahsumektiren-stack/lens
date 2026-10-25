@@ -534,6 +534,7 @@ function renderSettings() {
   $('#apiKey').value = settings.apiKey;
   $('#model').value = settings.model;
   $('#closeAfterSave').checked = settings.closeAfterSave;
+  $('#siteLayout').checked = store.get('siteLayout', true);
   $('#autoSpeak').checked = settings.autoSpeak;
   const ready = cards.filter((c) => c.status === 'ready');
   const reviewedToday = cards.filter((c) => c.lastReviewed && now() - c.lastReviewed < DAY).length;
@@ -636,6 +637,7 @@ function bind() {
     store.set('apiKey', $('#apiKey').value.trim());
     store.set('model', $('#model').value.trim() || 'gemini-2.5-flash-lite');
     store.set('closeAfterSave', $('#closeAfterSave').checked);
+    store.set('siteLayout', $('#siteLayout').checked);
     store.set('autoSpeak', $('#autoSpeak').checked);
     toast('Kaydedildi');
     enrichPending();

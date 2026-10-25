@@ -302,3 +302,8 @@ html, body { overflow-x: hidden; }
 .r-bar { width: 100%; }
 
 .r-body .w.ox, .r-body .w.kn { text-decoration-skip-ink: none; }
+
+.legend .ghost { padding: 6px 10px; font-size: 13px; margin-left: 4px; }
+.toggle small { font-size: 12px; line-height: 1.35; display: block; margin-top: 2px; }
+.toggle { align-items: flex-start; }
+.toggle input { margin-top: 3px; flex: none; }

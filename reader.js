@@ -57,12 +57,14 @@ const READ_SVCS = [
   ['allorigins', async (url) => {
     const r = await fetchWithTimeout('https://api.allorigins.win/raw?url=' + encodeURIComponent(url), {}, 20000);
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    return htmlToArticle(await r.text(), url);
+    const html = await r.text();
+    return { ...htmlToArticle(html, url), html };
   }],
   ['corsproxy', async (url) => {
     const r = await fetchWithTimeout('https://corsproxy.io/?url=' + encodeURIComponent(url), {}, 20000);
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    return htmlToArticle(await r.text(), url);
+    const html = await r.text();
+    return { ...htmlToArticle(html, url), html };
   }]
 ];
 async function fetchWithTimeout(url, opts, ms) {
@@ -184,10 +186,12 @@ async function importArticle(url, titleHint = '') {
   $('#readerSite').textContent = hostOf(url);
   host.innerHTML = `<div class="r-loading"><div class="spinner"></div><p>Sayfa sadeleştiriliyor…</p><p class="sub">${esc(titleHint || url)}</p></div>`;
   const errs = [];
+  // site düzeni açıksa orijinal HTML'i metinle aynı anda getirmeye başla
+  const htmlP = siteLayoutOn() ? fetchPageHTML(url).catch(() => null) : Promise.resolve(null);
   for (const [name, fn] of READ_SVCS) {
     try {
       const a = await fn(url);
-      const blocks = tidyBlocks(a.blocks || [], a.title);
+      const blocks = tidyBlocks(a.blocks || [], cleanTitle(a.title || titleHint));
       const words = blocks.filter((b) => b.text).reduce((n, b) => n + b.text.split(/\s+/).length, 0);
       if (words < 40) { errs.push(name + ': metin çok kısa'); continue; }
       const art = {
@@ -195,6 +199,23 @@ async function importArticle(url, titleHint = '') {
         published: a.published || '', image: a.image || blocks.find((x) => x.t === 'img')?.src || '', blocks, words, minutes: Math.max(1, Math.round(words / 200)),
         createdAt: now(), progress: 0, scrollY: 0, trans: {}, via: name
       };
+      if (siteLayoutOn()) {
+        host.innerHTML = `<div class="r-loading"><div class="spinner"></div><p>Sitenin düzeni ölçülüyor…</p><p class="sub">${esc(art.title)}</p>
+          <button class="ghost" id="rSkipLayout">Atla</button></div>`;
+        let skip;
+        const skipP = new Promise((res) => (skip = res));
+        $('#rSkipLayout').onclick = () => skip(null);
+        try {
+          art.layout = await Promise.race([
+            (async () => {
+              const html = a.html || (await withTimeout(htmlP, 16000).catch(() => null));
+              return html ? await measureLayout(html, url, blocks) : null;
+            })(),
+            skipP,
+            new Promise((res) => setTimeout(() => res(null), 30000))
+          ]);
+        } catch { art.layout = null; }
+      }
       await saveArticle(art);
       return openArticle(art.id);
     } catch (e) {
@@ -228,7 +249,7 @@ async function renderLibrary() {
 const rd = { art: null, sel: null, extend: false, saveT: null, cache: new Map(), reading: false };
 const readPrefs = {
   get size() { return store.get('readSize', 17); },
-  get font() { return store.get('readFont', 'sans'); },
+  get font() { return store.get('readFont', 'auto'); },
   get theme() { return store.get('readTheme', 'auto'); },
   get ox() { return store.get('oxLevel', 3); } // 0 = kapalı, 1 = A1+ … 5 = C1
 };
@@ -238,6 +259,7 @@ function applyReadPrefs() {
   v.style.setProperty('--r-size', readPrefs.size + 'px');
   v.dataset.font = readPrefs.font;
   v.dataset.theme = readPrefs.theme;
+  applySiteLayout(rd.art);
 }
 
 async function openArticle(id) {
@@ -270,7 +292,9 @@ function renderArticle() {
     return `<span class="${cls}" data-b="${b}" data-i="${i}">${esc(raw)}</span>`;
   };
   const textHTML = (text, b) => tokenize(text).map((t, i) => (t.word ? wordSpan(t.raw, b, i) : esc(t.raw))).join('');
+  const tnorm = (s) => String(s || '').toLowerCase().replace(/\W+/g, ' ').trim();
   const parts = a.blocks.map((bl, b) => {
+    if (bl.t === 'h' && b < 3 && tnorm(bl.text) === tnorm(a.title)) return ''; // başlığın içerikteki kopyası
     if (bl.t === 'img') return `<img class="r-img" src="${esc(bl.src)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`;
     const tag = { h: 'h2', li: 'li', q: 'blockquote', cap: 'p', p: 'p' }[bl.t] || 'p';
     const tr = a.trans?.[b] && a.showTr?.[b] ? `<div class="r-tr" data-trof="${b}">${esc(a.trans[b])}</div>` : '';
@@ -483,12 +507,20 @@ function firstVisibleBlock() {
 /* ----- yazı ayarları ----- */
 function renderPrefs() {
   const p = $('#rPrefs');
+  const a = rd.art;
+  const site = siteLayoutActive(a);
   const sizes = [15, 16, 17, 18, 20, 22];
+  const looks = [['auto', 'Orijinal site'], ['sans', 'Orijinale yakın'], ['serif', 'Kitap']];
+  let siteNote = '';
+  if (readPrefs.font === 'auto') {
+    if (!siteLayoutOn()) siteNote = '<div class="legend">Site düzeni Ayarlar’dan kapalı; genel görünüm kullanılıyor.</div>';
+    else if (!a?.layout) siteNote = '<div class="legend"><span id="rLayoutMsg">Bu yazı için sitenin düzeni henüz alınmadı.</span> <button class="ghost" id="rMeasure">Sitenin düzenini al</button></div>';
+    else siteNote = `<div class="legend">Sitenin ölçüleri: ${a.layout.p.size}px yazı, ${Math.round(a.layout.W - a.layout.left - a.layout.right)}px sütun${a.layout.faces.length ? ', sitenin yazı tipi' : ', benzer yazı tipi'}.</div>`;
+  }
   p.innerHTML = `
-    <div class="pref"><span>Boyut</span><div class="seg">${sizes.map((s) => `<button data-size="${s}" class="${readPrefs.size === s ? 'on' : ''}" style="font-size:${Math.round(s * 0.75)}px">A</button>`).join('')}</div></div>
-    <div class="pref"><span>Görünüm</span><div class="seg">
-      <button data-font="sans" class="${readPrefs.font === 'sans' ? 'on' : ''}">Orijinale yakın</button>
-      <button data-font="serif" class="${readPrefs.font === 'serif' ? 'on' : ''}" style="font-family:Georgia,serif">Kitap</button></div></div>
+    <div class="pref"><span>Görünüm</span><div class="seg">${looks.map(([k, l]) => `<button data-font="${k}" class="${readPrefs.font === k ? 'on' : ''}"${k === 'serif' ? ' style="font-family:Georgia,serif"' : ''}>${l}</button>`).join('')}</div></div>
+    ${siteNote}
+    ${site ? '' : `<div class="pref"><span>Boyut</span><div class="seg">${sizes.map((s) => `<button data-size="${s}" class="${readPrefs.size === s ? 'on' : ''}" style="font-size:${Math.round(s * 0.75)}px">A</button>`).join('')}</div></div>`}
     <div class="pref"><span>Tema</span><div class="seg">
       ${[['auto', 'Oto'], ['light', 'Açık'], ['sepia', 'Sepya'], ['dark', 'Koyu']].map(([k, l]) => `<button data-theme="${k}" class="${readPrefs.theme === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
     <div class="pref"><span>Oxford vurgusu</span><div class="seg">
@@ -522,6 +554,11 @@ function bindReader() {
   $('#rPrefs').addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;
+    if (b.id === 'rMeasure') {
+      b.disabled = true;
+      remeasureArticle(rd.art, $('#rLayoutMsg')).then((ok) => { if (ok) { applyReadPrefs(); renderPrefs(); } else b.disabled = false; });
+      return;
+    }
     if (b.dataset.size) store.set('readSize', +b.dataset.size);
     if (b.dataset.font) store.set('readFont', b.dataset.font);
     if (b.dataset.theme) store.set('readTheme', b.dataset.theme);

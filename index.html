@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=11">
+  <link rel="stylesheet" href="styles.css?v=12">
 </head>
 <body>
   <header class="top">
@@ -91,6 +91,10 @@
         <small>Bu modelin kotası dolarsa diğer Gemini modellerine otomatik geçilir.</small>
       </label>
       <label class="toggle">
+        <input id="siteLayout" type="checkbox">
+        <span>Yazıları sitenin kendi düzeniyle aç<br><small class="sub">Orijinal sayfanın yazı tipi, boyutu ve satır genişliği kopyalanır. İçeri alma birkaç saniye uzayabilir; kapatırsan hızlı genel görünüm kullanılır.</small></span>
+      </label>
+      <label class="toggle">
         <input id="closeAfterSave" type="checkbox">
         <span>Paylaşımdan kaydedince uygulamayı kapat</span>
       </label>
@@ -123,8 +127,9 @@
 
   <div id="toast" class="toast" hidden></div>
 
-  <script src="readability.js?v=11"></script>
-  <script src="reader.js?v=11"></script>
-  <script src="app.js?v=11"></script>
+  <script src="readability.js?v=12"></script>
+  <script src="reader.js?v=12"></script>
+  <script src="sitelayout.js?v=12"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>
