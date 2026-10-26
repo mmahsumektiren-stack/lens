@@ -307,3 +307,10 @@ html, body { overflow-x: hidden; }
 .toggle small { font-size: 12px; line-height: 1.35; display: block; margin-top: 2px; }
 .toggle { align-items: flex-start; }
 .toggle input { margin-top: 3px; flex: none; }
+
+.r-loading.fail { text-align: left; max-width: 420px; margin: 0 auto; }
+.r-loading.fail p, .r-loading.fail ol { margin: 0 0 12px; line-height: 1.5; color: var(--r-text); }
+.steps { padding-left: 20px; }
+.steps li { margin: 4px 0; list-style: decimal; }
+.r-loading details { margin-top: 14px; font-size: 13px; }
+.netres { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }

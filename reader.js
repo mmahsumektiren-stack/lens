@@ -193,7 +193,7 @@ async function importArticle(url, titleHint = '') {
       const a = await fn(url);
       const blocks = tidyBlocks(a.blocks || [], cleanTitle(a.title || titleHint));
       const words = blocks.filter((b) => b.text).reduce((n, b) => n + b.text.split(/\s+/).length, 0);
-      if (words < 40) { errs.push(name + ': metin çok kısa'); continue; }
+      if (words < 40) { errs.push(name + ': metin çok kısa (muhtemelen bot doğrulaması)'); continue; }
       const art = {
         id: uid(), url, title: cleanTitle(a.title || titleHint, a.site) || hostOf(url), site: a.site || hostOf(url), byline: a.byline || '',
         published: a.published || '', image: a.image || blocks.find((x) => x.t === 'img')?.src || '', blocks, words, minutes: Math.max(1, Math.round(words / 200)),
@@ -222,11 +222,87 @@ async function importArticle(url, titleHint = '') {
       errs.push(name + ': ' + (e.name === 'AbortError' ? 'zaman aşımı' : e.message || 'erişilemedi'));
     }
   }
-  host.innerHTML = `<div class="r-loading"><p>Bu sayfa getirilemedi.</p><p class="sub">${esc(errs.join(' · '))}</p>
-    <div class="row" style="justify-content:center"><button class="ghost" id="rRetry">Tekrar dene</button>
-    <a class="ghost" href="${esc(url)}" target="_blank" rel="noopener" style="text-decoration:none;padding:11px 16px">Sayfayı aç ↗</a></div>
-    <p class="sub">İpucu: Sayfada metni seçip Paylaş → Lens dersen o kısım doğrudan eklenir.</p></div>`;
+  store.set('failedImport', { url, title: titleHint, at: now() });
+  const blocked = errs.some((e) => /metin çok kısa|HTTP 40[13]|HTTP 451/.test(e));
+  host.innerHTML = `<div class="r-loading fail">
+    <p><b>Bu sayfa getirilemedi.</b></p>
+    <p>${blocked ? 'Bu site otomatik erişimi engelliyor (bot koruması). Uzaktan hiçbir servis sayfayı alamıyor, ama sen tarayıcında zaten görüyorsun:' : 'Okuma servislerine ulaşılamadı. Tekrar deneyebilir ya da metni tarayıcından gönderebilirsin:'}</p>
+    <ol class="steps">
+      <li>Sayfayı Chrome'da aç</li>
+      <li>Yazının üstüne uzun bas → <b>Tümünü seç</b></li>
+      <li><b>Paylaş → Lens</b> — yazı okuyucuda açılır</li>
+    </ol>
+    <div class="row" style="justify-content:center">
+      <a class="ghost" href="${esc(url)}" target="_blank" rel="noopener" style="text-decoration:none;padding:11px 16px">Sayfayı aç ↗</a>
+      <button class="ghost" id="rRetry">Tekrar dene</button>
+    </div>
+    <details class="sub"><summary>Teknik ayrıntı</summary>${esc(errs.join(' · '))}</details></div>`;
   $('#rRetry').onclick = () => importArticle(url, titleHint);
+}
+
+/* ---------- paylaşılan uzun metinden yazı (bot korumalı siteler için: Tümünü seç → Paylaş) ---------- */
+const wordCount = (s) => (String(s || '').match(/[A-Za-z]{2,}/g) || []).length;
+function textToBlocks(text) {
+  const out = [];
+  for (let line of String(text).split(/\n+/)) {
+    line = line.replace(/[ \t]+/g, ' ').trim();
+    if (!line) continue;
+    if (/^[•·\-*–]\s+/.test(line)) { out.push({ t: 'li', text: line.replace(/^[•·\-*–]\s+/, '') }); continue; }
+    const n = line.split(' ').length;
+    const heading = n >= 3 && n <= 14 && !/[.!?:;,"”)]$/.test(line) && /^[A-Z0-9“"‘']/.test(line);
+    out.push({ t: heading ? 'h' : 'p', text: line });
+  }
+  return out;
+}
+const isLongPara = (s) => s.split(' ').length >= 18 && /[.!?"”]$/.test(s);
+function slugWords(url) {
+  try {
+    const seg = new URL(url).pathname.split('/').filter(Boolean).sort((a, b) => b.length - a.length)[0] || '';
+    return new Set(decodeURIComponent(seg).toLowerCase().replace(/\.[a-z]+$/, '').split(/[-_]+/).filter((w) => w.length > 2 && !/^\d{4,}$/.test(w)));
+  } catch { return new Set(); }
+}
+function pickTitle(lines, url) {
+  const firstLong = lines.findIndex((l) => isLongPara(l));
+  const pool = (firstLong > 0 ? lines.slice(0, firstLong) : lines.slice(0, 12))
+    .filter((l) => { const n = l.split(' ').length; return n >= 5 && n <= 25 && !/[.]$/.test(l); });
+  if (!pool.length) return '';
+  const slug = slugWords(url);
+  if (slug.size) {
+    const score = (l) => l.toLowerCase().split(/[^a-z0-9]+/).filter((w) => slug.has(w)).length;
+    const best = pool.reduce((a, b) => (score(b) > score(a) ? b : a));
+    if (score(best) >= 3) return best;
+  }
+  const clean = pool.filter((l) => !/[A-Z]{3,}\/|rights|illustration|photo|image|getty|reuters\/|©|cookie|subscribe|sign in|newsletter/i.test(l));
+  return (clean.length ? clean : pool).reduce((a, b) => (b.split(' ').length > a.split(' ').length ? b : a));
+}
+async function importTextArticle(text, title = '', url = '') {
+  await loadArticles();
+  // bu metin az önce içeri alınamayan bir sayfadan geliyorsa onun linkini kullan
+  const failed = store.get('failedImport', null);
+  if (!url && failed && now() - failed.at < 20 * 60000) { url = failed.url; title = title || failed.title || ''; }
+  url = url ? normUrl(url) : '';
+  const lines0 = String(text).split(/\n+/).map((l) => l.replace(/[ \t]+/g, ' ').trim()).filter(Boolean);
+  const textKey = 'text:' + normTxt(lines0.find((l) => isLongPara(l)) || text).slice(0, 160);
+  const key = url || textKey;
+  const existing = articles.find((a) => (url && a.url === url) || a.textKey === textKey);
+  if (existing) return openArticle(existing.id);
+
+  const lines = String(text).split(/\n+/).map((l) => l.replace(/[ \t]+/g, ' ').trim()).filter(Boolean);
+  const pickedTitle = cleanTitle(title) || pickTitle(lines, url);
+  // gövde ilk gerçek paragraftan başlar (öncesi menü, tarih, fotoğraf açıklaması)
+  const firstLong = lines.findIndex((l) => isLongPara(l));
+  const bodyLines = firstLong > 0 ? lines.slice(firstLong) : lines.filter((l) => l !== pickedTitle);
+  let blocks = textToBlocks(bodyLines.join('\n'));
+  const t = pickedTitle || 'Paylaşılan yazı';
+  blocks = tidyBlocks(blocks, t);
+  const words = blocks.filter((b) => b.text).reduce((n, b) => n + b.text.split(/\s+/).length, 0);
+  const art = {
+    id: uid(), url, key, textKey, title: t, site: url ? hostOf(url) : 'Paylaşılan metin', byline: '', published: '', image: '',
+    blocks, words, minutes: Math.max(1, Math.round(words / 200)), createdAt: now(), progress: 0, scrollY: 0, trans: {}, via: 'paylaşım', layout: null
+  };
+  if (failed && url === normUrl(failed.url)) store.set('failedImport', null);
+  await saveArticle(art);
+  return openArticle(art.id);
 }
 
 /* ---------- kütüphane ---------- */

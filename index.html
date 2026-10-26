@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=12">
+  <link rel="stylesheet" href="styles.css?v=13">
 </head>
 <body>
   <header class="top">
@@ -46,6 +46,7 @@
       <div id="sourceLine" class="source" hidden></div>
       <div id="diag" class="diag" hidden></div>
       <button id="saveBtn" class="primary big">Kaydet</button>
+      <button id="toReaderBtn" class="ghost big" hidden>📖 Uzun metin — okuyucuda yazı olarak aç</button>
     </section>
 
     <!-- OKU (kütüphane) -->
@@ -105,6 +106,10 @@
       <button id="saveSettings" class="primary">Ayarları kaydet</button>
       <button id="testKey" class="ghost">Anahtarı test et</button>
 
+      <h2>Bağlantılar</h2>
+      <button id="netTest" class="ghost">Bağlantıları test et</button>
+      <div id="netResult" class="netres"></div>
+
       <h2>Yedek</h2>
       <div class="row">
         <button id="exportBtn" class="ghost">Dışa aktar (JSON)</button>
@@ -127,9 +132,9 @@
 
   <div id="toast" class="toast" hidden></div>
 
-  <script src="readability.js?v=12"></script>
-  <script src="reader.js?v=12"></script>
-  <script src="sitelayout.js?v=12"></script>
-  <script src="app.js?v=12"></script>
+  <script src="readability.js?v=13"></script>
+  <script src="reader.js?v=13"></script>
+  <script src="sitelayout.js?v=13"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>

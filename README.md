@@ -44,7 +44,9 @@ Paylaş menüsü ve kurulum için site **HTTPS** üzerinden açılmalı.
 - **Aa**: yazı boyutu, serif/sans, tema (oto/açık/sepya/koyu), Oxford vurgu seviyesi.
 - Altı çizili = Oxford 3000/5000 listesinde (seçtiğin seviye ve üstü), noktalı = kartlarında var.
 - Sayfa metni Jina Reader (r.jina.ai) ile, olmazsa allorigins + Mozilla Readability ile çekilir; bu servislere sadece sayfanın linki gider.
-- Sayfada metni **seçip** paylaşırsan okuyucu yerine doğrudan Ekle ekranına gelir.
+- Sayfada kısa bir metni **seçip** paylaşırsan Ekle ekranına gelir; uzun metin (60+ kelime) okuyucuda yazı olarak açılır.
+- **Bot korumalı siteler** (Reuters vb.) uzaktan okunamaz: sayfada uzun bas → **Tümünü seç** → **Paylaş → Lens**. Menü/fotoğraf açıklaması ayıklanır, başlık ve kaynak linki az önce açılamayan sayfadan alınır.
+- **Ayarlar → Bağlantıları test et**: Jina, allorigins, corsproxy ve fxtwitter'a telefondan erişilebiliyor mu gösterir.
 
 ## Dosyalar
 

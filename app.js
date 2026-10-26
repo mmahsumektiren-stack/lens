@@ -322,6 +322,7 @@ function renderTokens() {
   $('#addText').hidden = !!addState.tweet && !addState.editing;
   $('#editTextBtn').hidden = !addState.tweet;
   $('#targetPreview').textContent = currentTarget() || '—';
+  $('#toReaderBtn').hidden = !!addState.tweet || wordCount(text) < 60;
 }
 function currentTarget() {
   const text = $('#addText').value.trim();
@@ -580,6 +581,12 @@ function bind() {
     $('#clipBanner').hidden = true;
   });
   $('#saveBtn').addEventListener('click', onSave);
+  $('#toReaderBtn').addEventListener('click', () => {
+    const t = $('#addText').value, src = addState.source;
+    resetAdd();
+    importTextArticle(t, '', src);
+  });
+  $('#netTest').addEventListener('click', runNetTest);
 
   $('#reviewArea').addEventListener('click', (e) => {
     const sp = e.target.closest('[data-speak]');
@@ -814,6 +821,29 @@ async function checkClipboard() {
   } catch {}
 }
 
+/* ---------- bağlantı testi ---------- */
+async function runNetTest() {
+  const box = $('#netResult');
+  const T = 'https://example.com/';
+  const tests = [
+    ['Jina (web sayfası metni)', () => fetch('https://r.jina.ai/' + T, { headers: { Accept: 'application/json' } }).then((r) => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))).then((j) => /Example Domain/.test(JSON.stringify(j)))],
+    ['allorigins (site düzeni)', () => fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(T)).then((r) => r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))).then((t) => /Example Domain/.test(t))],
+    ['corsproxy (site düzeni)', () => fetch('https://corsproxy.io/?url=' + encodeURIComponent(T)).then((r) => r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))).then((t) => /Example Domain/.test(t))],
+    ['fxtwitter (tweet metni)', () => fetch('https://api.fxtwitter.com/status/20').then((r) => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))).then((j) => !!j.tweet)]
+  ];
+  box.innerHTML = tests.map(([n]) => `<div>⏳ ${esc(n)}</div>`).join('');
+  const res = await Promise.all(tests.map(async ([n, fn]) => {
+    const t0 = performance.now();
+    try {
+      const ok = await withTimeout(fn(), 15000);
+      return `<div>${ok ? '✅' : '⚠️'} ${esc(n)} <span class="sub">${Math.round(performance.now() - t0)} ms${ok ? '' : ' · beklenmeyen yanıt'}</span></div>`;
+    } catch (e) {
+      return `<div>❌ ${esc(n)} <span class="sub">${esc(e.message || 'erişilemedi')}</span></div>`;
+    }
+  }));
+  box.innerHTML = res.join('');
+}
+
 /* ---------- paylaşımdan gelen veri ---------- */
 function handleLaunchParams() {
   const p = new URLSearchParams(location.search);
@@ -831,6 +861,12 @@ function handleLaunchParams() {
     return;
   }
   const body = cleanShared(text) || (tweetId ? '' : cleanShared(title));
+  // Uzun metin (ör. sayfada "Tümünü seç → Paylaş") → okuyucuda yazı olarak aç
+  if (!tweetId && wordCount(body) >= 60) {
+    history.replaceState(null, '', location.pathname);
+    importTextArticle(body, cleanShared(title) !== body ? cleanShared(title) : '', source);
+    return;
+  }
 
   if (body || tweetId) {
     addState.fromShare = true;
