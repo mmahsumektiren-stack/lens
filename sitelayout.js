@@ -11,6 +11,7 @@ function withTimeout(p, ms) {
 async function fetchTextVia(url, ms) {
   const tries = [
     url,
+    ...(store.get('proxyUrl', '') ? [store.get('proxyUrl', '').replace(/\/$/, '') + '/?url=' + encodeURIComponent(url)] : []),
     'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
     'https://corsproxy.io/?url=' + encodeURIComponent(url)
   ].map(async (u) => {
@@ -22,9 +23,24 @@ async function fetchTextVia(url, ms) {
   });
   return Promise.any(tries);
 }
-// sayfanın HTML'i (doğrudan istek çoğu sitede CORS'a takılır; vekiller yarışır, ilk gelen kazanır)
+// Jina'dan sayfanın HTML'i (JSON yanıt; alan adı sürüme göre html/content olabilir)
+async function jinaHTML(url, ms = 20000) {
+  const r = await fetchWithTimeout('https://r.jina.ai/' + url, { headers: { Accept: 'application/json', 'X-Return-Format': 'html' } }, ms);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const ct = r.headers.get('content-type') || '';
+  if (/json/.test(ct)) {
+    const j = await r.json();
+    const d = j.data || j;
+    const h = d.html || d.content || '';
+    if (!/<\w+[\s>]/.test(h)) throw new Error('HTML yok');
+    return h;
+  }
+  return r.text();
+}
+// sayfanın HTML'i: Jina + (varsa) yedek vekiller yarışır, ilk geçerli yanıt kazanır
 function fetchPageHTML(url) {
   return Promise.any([
+    jinaHTML(url),
     fetchWithTimeout('https://api.allorigins.win/raw?url=' + encodeURIComponent(url), {}, 15000).then((r) => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)))),
     fetchWithTimeout('https://corsproxy.io/?url=' + encodeURIComponent(url), {}, 15000).then((r) => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))))
   ]).then((t) => (/<p[\s>]/i.test(t) ? t : Promise.reject(new Error('HTML yok'))));

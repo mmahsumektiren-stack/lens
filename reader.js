@@ -54,6 +54,10 @@ const READ_SVCS = [
     const blocks = markdownToBlocks(d.content || '');
     return { title: d.title, blocks, published: d.publishedTime || '', site: hostOf(d.url || url) };
   }],
+  ['jina-html', async (url) => {
+    const html = await jinaHTML(url, 25000);
+    return { ...htmlToArticle(html, url), html };
+  }],
   ['allorigins', async (url) => {
     const r = await fetchWithTimeout('https://api.allorigins.win/raw?url=' + encodeURIComponent(url), {}, 20000);
     if (!r.ok) throw new Error('HTTP ' + r.status);

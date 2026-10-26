@@ -827,8 +827,9 @@ async function runNetTest() {
   const T = 'https://example.com/';
   const tests = [
     ['Jina (web sayfası metni)', () => fetch('https://r.jina.ai/' + T, { headers: { Accept: 'application/json' } }).then((r) => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))).then((j) => /Example Domain/.test(JSON.stringify(j)))],
-    ['allorigins (site düzeni)', () => fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(T)).then((r) => r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))).then((t) => /Example Domain/.test(t))],
-    ['corsproxy (site düzeni)', () => fetch('https://corsproxy.io/?url=' + encodeURIComponent(T)).then((r) => r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))).then((t) => /Example Domain/.test(t))],
+    ['Jina HTML (site düzeni)', () => jinaHTML(T, 15000).then((h) => /Example Domain/.test(h))],
+    ['allorigins (yedek)', () => fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(T)).then((r) => r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))).then((t) => /Example Domain/.test(t))],
+    ['corsproxy (yedek)', () => fetch('https://corsproxy.io/?url=' + encodeURIComponent(T)).then((r) => r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))).then((t) => /Example Domain/.test(t))],
     ['fxtwitter (tweet metni)', () => fetch('https://api.fxtwitter.com/status/20').then((r) => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))).then((j) => !!j.tweet)]
   ];
   box.innerHTML = tests.map(([n]) => `<div>⏳ ${esc(n)}</div>`).join('');
