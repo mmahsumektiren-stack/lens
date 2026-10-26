@@ -75,3 +75,6 @@ Bazı siteler yazı tiplerini başka sitelere vermez; o zaman satırlar orijinal
 küçük bir vekil: sadece Lens'in adresinden gelen isteklere yanıt verir, iç ağ adreslerine gitmez, yanıtları 1 gün önbelleğe alır.
 Kurulum: dash.cloudflare.com → Workers & Pages → Create → Worker → Deploy → Edit code → dosyayı yapıştır → Deploy →
 `…workers.dev` adresini Lens → Ayarlar → "Kendi vekil adresin"e yaz → Kaydet → Bağlantıları test et.
+
+**Ev internetin `workers.dev`'i engelliyorsa** (ERR_SSL_PROTOCOL_ERROR, mobil veride açılıyor): `tools/deno-proxy.js`'i
+dash.deno.com → New Playground'a yapıştır → Save & Deploy → `…deno.dev` adresini Lens'e yaz. Aynı vekil, farklı adres.
