@@ -215,7 +215,7 @@ async function importArticle(url, titleHint = '') {
             (async () => {
               const got = (a.html && directHTML(a.html)) || (await withTimeout(htmlP, 16000).catch(() => null));
               if (!got) return null;
-              const L = await measureLayout(got.html, url, blocks);
+              const L = await measureLayout(got.html, url, blocks).catch((e) => { store.set('lastLayoutErr', e.message + ' — kaynak: ' + got.src); return null; });
               if (L) L.src = got.src;
               return L;
             })(),
@@ -598,7 +598,7 @@ function renderPrefs() {
   let siteNote = '';
   if (readPrefs.font === 'auto') {
     if (!siteLayoutOn()) siteNote = '<div class="legend">Site düzeni Ayarlar’dan kapalı; genel görünüm kullanılıyor.</div>';
-    else if (!a?.layout || badLayout(a.layout)) siteNote = '<div class="legend"><span id="rLayoutMsg">Bu yazı için sitenin düzeni henüz alınmadı.</span> <button class="ghost" id="rMeasure">Sitenin düzenini al</button></div>';
+    else if (!a?.layout || badLayout(a.layout)) siteNote = '<div class="legend"><span id="rLayoutMsg">Bu yazı için sitenin düzeni alınamadı ya da henüz alınmadı.</span> <button class="ghost" id="rMeasure">Sitenin düzenini al</button></div>';
     else siteNote = `<div class="legend"><span id="rLayoutMsg">Sitenin ölçüleri: ${a.layout.p.size}px yazı, ${Math.round(a.layout.W - a.layout.left - a.layout.right)}px sütun${a.layout.faces.length ? ', sitenin yazı tipi' : ', benzer yazı tipi'}${a.layout.src ? ' (' + esc(a.layout.src) + ')' : ''}.</span> <button class="ghost" id="rMeasure">Yeniden ölç</button></div>`;
   }
   p.innerHTML = `

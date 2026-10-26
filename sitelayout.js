@@ -100,9 +100,20 @@ async function tryFace(f) {
   return null;
 }
 
+class LayoutErr extends Error {}
+// script çalışmadan da CSS'in devreye girmesi için yaygın "geç yükleme" kalıplarını düzelt
+function unlazyCSS(h) {
+  return h
+    // <link rel="preload" as="style" onload="this.rel='stylesheet'"> → stylesheet
+    .replace(/<link\b([^>]*?)\brel=["']?preload["']?([^>]*?)>/gi, (m, a, b) => (/\bas=["']?style/i.test(a + b) ? `<link${a}rel="stylesheet"${b}>` : m))
+    // media="print" onload="this.media='all'" → media="all"
+    .replace(/<link\b[^>]*>/gi, (m) => (/stylesheet/i.test(m) && /onload=/i.test(m) ? m.replace(/\bmedia=["']?[^"'\s>]+["']?/i, 'media="all"') : m))
+    // <style media="not all"> / disabled hileleri
+    .replace(/<link\b([^>]*?)\sdisabled(=["'][^"']*["'])?/gi, '<link$1');
+}
 async function measureLayout(html, url, blocks) {
   const W = Math.round(document.documentElement.clientWidth || innerWidth);
-  let src = html.replace(/<script\b[\s\S]*?<\/script>/gi, '').replace(/<meta[^>]+http-equiv[^>]*>/gi, '');
+  let src = unlazyCSS(html.replace(/<script\b[\s\S]*?<\/script>/gi, '').replace(/<meta[^>]+http-equiv[^>]*>/gi, ''));
   const baseTag = `<base href="${url.replace(/"/g, '&quot;')}">`;
   src = /<head[^>]*>/i.test(src) ? src.replace(/<head([^>]*)>/i, `<head$1>${baseTag}`) : baseTag + src;
 
@@ -114,14 +125,19 @@ async function measureLayout(html, url, blocks) {
   fr.srcdoc = src;
   document.body.appendChild(fr);
   try {
-    await withTimeout(loaded, 9000).catch(() => {});
+    await withTimeout(loaded, 15000).catch(() => {});
     const doc = fr.contentDocument, win = fr.contentWindow;
-    if (!doc || !doc.body) return null;
+    if (!doc || !doc.body) throw new LayoutErr('sayfa çizilemedi');
+    // stil dosyalarının gelmesini bekle (mobil veride geç gelebilir)
+    const nLinks = doc.querySelectorAll('link[rel~="stylesheet"]').length;
+    const t0 = Date.now();
+    while (Date.now() - t0 < 8000 && [...doc.styleSheets].filter((sh) => sh.href).length < nLinks) await new Promise((r) => setTimeout(r, 250));
+    const nSheets = [...doc.styleSheets].filter((sh) => sh.href).length;
     await withTimeout(doc.fonts ? doc.fonts.ready : Promise.resolve(), 3000).catch(() => {});
 
     // bizim metnimizle eşleşen gerçek yazı paragrafını bul
     const probes = blocks.filter((b) => b.t === 'p' && b.text.split(' ').length >= 10).slice(0, 8).map((b) => normTxt(b.text).slice(0, 60));
-    if (!probes.length) return null;
+    if (!probes.length) throw new LayoutErr('yazıda uzun paragraf yok');
     let para = null;
     for (const probe of probes) {
       para = [...doc.querySelectorAll('p')].find((el) => normTxt(el.textContent).includes(probe));
@@ -131,18 +147,22 @@ async function measureLayout(html, url, blocks) {
       }
       if (para) break;
     }
-    if (!para) return null;
+    const diag = `CSS ${nSheets}/${nLinks}`;
+    if (!para) throw new LayoutErr(`yazı paragrafı sayfada bulunamadı (${diag}, ${doc.querySelectorAll('p').length} p)`);
     const cs = win.getComputedStyle(para);
     const rect = para.getBoundingClientRect();
     const pl = px(cs.paddingLeft) || 0, pr = px(cs.paddingRight) || 0;
     const left = Math.round((rect.left + pl) * 10) / 10;
     const width = Math.round((rect.width - pl - pr) * 10) / 10;
-    if (!(width > 150 && width <= W + 1 && left >= 0)) return null;
     const size = px(cs.fontSize);
-    if (!(size >= 11 && size <= 32)) return null;
+    const info = `${diag}, ${size}px ${families(cs.fontFamily)[0] || '?'}, sol ${left}, genişlik ${width}`;
+    if (!(width > 150 && width <= W + 1 && left >= 0)) throw new LayoutErr(`paragraf ölçüsü beklenmedik (${info})`);
+    if (!(size >= 11 && size <= 32)) throw new LayoutErr(`yazı boyutu beklenmedik (${info})`);
     const bodyCs = win.getComputedStyle(doc.body);
     const looksDefault = /times/i.test(cs.fontFamily) && size === 16 && cs.lineHeight === 'normal' && Math.round(px(bodyCs.marginLeft) || 0) === 8;
-    if (looksDefault || ![...doc.styleSheets].some((sh) => { try { return sh.href || sh.cssRules.length > 5; } catch { return true; } })) return null;
+    if (looksDefault || !nSheets && ![...doc.styleSheets].some((sh) => { try { return sh.cssRules.length > 5; } catch { return true; } })) {
+      throw new LayoutErr(`sitenin CSS'i yüklenmedi (${info})`);
+    }
 
     const h1 = doc.querySelector('h1');
     const hs = h1 ? win.getComputedStyle(h1) : null;
@@ -222,11 +242,13 @@ async function remeasureArticle(a, statusEl) {
   try {
     if (statusEl) statusEl.textContent = 'Sitenin düzeni ölçülüyor…';
     const got = await fetchPageHTML(a.url);
-    const L = await withTimeout(measureLayout(got.html, a.url, a.blocks), 25000);
-    if (!L) {
+    let L = null;
+    try {
+      L = await withTimeout(measureLayout(got.html, a.url, a.blocks), 40000);
+    } catch (e) {
       a.layout = null; // bozuk eski ölçümü temizle
       await saveArticle(a);
-      throw new Error('sitenin stili okunamadı');
+      throw new Error(`${e.message} — kaynak: ${got.src}`);
     }
     L.src = got.src;
     a.layout = L;
