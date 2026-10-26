@@ -68,3 +68,10 @@ Güncelleme yaptığında `sw.js` içindeki `VERSION` değerini artır (`lens-v2
 `oxford.json`, Oxford Learner's Dictionaries'in resmi PDF'lerinden üretildi:
 *The Oxford 3000 by CEFR level* ve *The Oxford 5000 by CEFR level* (© Oxford University Press).
 4.953 kelime: A1 900 · A2 793 · B1 690 · B2 1.296 · C1 1.274. Birden çok seviyede geçen kelimede en düşüğü alındı.
+
+## Kendi vekilin (Cloudflare Worker, isteğe bağlı)
+
+Bazı siteler yazı tiplerini başka sitelere vermez; o zaman satırlar orijinalden kayabilir. `tools/cloudflare-worker.js`
+küçük bir vekil: sadece Lens'in adresinden gelen isteklere yanıt verir, iç ağ adreslerine gitmez, yanıtları 1 gün önbelleğe alır.
+Kurulum: dash.cloudflare.com → Workers & Pages → Create → Worker → Deploy → Edit code → dosyayı yapıştır → Deploy →
+`…workers.dev` adresini Lens → Ayarlar → "Kendi vekil adresin"e yaz → Kaydet → Bağlantıları test et.

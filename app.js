@@ -536,6 +536,7 @@ function renderSettings() {
   $('#model').value = settings.model;
   $('#closeAfterSave').checked = settings.closeAfterSave;
   $('#siteLayout').checked = store.get('siteLayout', true);
+  $('#proxyUrl').value = store.get('proxyUrl', '');
   $('#autoSpeak').checked = settings.autoSpeak;
   const ready = cards.filter((c) => c.status === 'ready');
   const reviewedToday = cards.filter((c) => c.lastReviewed && now() - c.lastReviewed < DAY).length;
@@ -645,6 +646,7 @@ function bind() {
     store.set('model', $('#model').value.trim() || 'gemini-2.5-flash-lite');
     store.set('closeAfterSave', $('#closeAfterSave').checked);
     store.set('siteLayout', $('#siteLayout').checked);
+    store.set('proxyUrl', $('#proxyUrl').value.trim());
     store.set('autoSpeak', $('#autoSpeak').checked);
     toast('Kaydedildi');
     enrichPending();
@@ -830,6 +832,7 @@ async function runNetTest() {
     ['Jina HTML (site düzeni)', () => jinaHTML(T, 15000).then((h) => /Example Domain/.test(h))],
     ['allorigins (yedek)', () => fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent(T)).then((r) => r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))).then((t) => /Example Domain/.test(t))],
     ['corsproxy (yedek)', () => fetch('https://corsproxy.io/?url=' + encodeURIComponent(T)).then((r) => r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))).then((t) => /Example Domain/.test(t))],
+    ...(myProxy() ? [['Kendi vekilin (yazı tipleri)', () => fetch(viaMyProxy(T)).then((r) => r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))).then((t) => /Example Domain/.test(t))]] : []),
     ['fxtwitter (tweet metni)', () => fetch('https://api.fxtwitter.com/status/20').then((r) => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))).then((j) => !!j.tweet)]
   ];
   box.innerHTML = tests.map(([n]) => `<div>⏳ ${esc(n)}</div>`).join('');

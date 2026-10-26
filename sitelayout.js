@@ -4,6 +4,8 @@
 'use strict';
 
 const siteLayoutOn = () => store.get('siteLayout', true);
+const myProxy = () => (store.get('proxyUrl', '') || '').trim().replace(/\/+$/, '');
+const viaMyProxy = (u) => myProxy() + '/?url=' + encodeURIComponent(u);
 
 function withTimeout(p, ms) {
   return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('zaman aşımı')), ms))]);
@@ -11,7 +13,7 @@ function withTimeout(p, ms) {
 async function fetchTextVia(url, ms) {
   const tries = [
     url,
-    ...(store.get('proxyUrl', '') ? [store.get('proxyUrl', '').replace(/\/$/, '') + '/?url=' + encodeURIComponent(url)] : []),
+    ...(myProxy() ? [viaMyProxy(url)] : []),
     'https://api.allorigins.win/raw?url=' + encodeURIComponent(url),
     'https://corsproxy.io/?url=' + encodeURIComponent(url)
   ].map(async (u) => {
@@ -41,6 +43,7 @@ async function jinaHTML(url, ms = 20000) {
 function fetchPageHTML(url) {
   return Promise.any([
     jinaHTML(url),
+    ...(myProxy() ? [fetchWithTimeout(viaMyProxy(url), {}, 15000).then((r) => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))))] : []),
     fetchWithTimeout('https://api.allorigins.win/raw?url=' + encodeURIComponent(url), {}, 15000).then((r) => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)))),
     fetchWithTimeout('https://corsproxy.io/?url=' + encodeURIComponent(url), {}, 15000).then((r) => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))))
   ]).then((t) => (/<p[\s>]/i.test(t) ? t : Promise.reject(new Error('HTML yok'))));
@@ -72,7 +75,7 @@ function parseFontFaces(css, base) {
 }
 
 async function tryFace(f) {
-  for (const u of [f.url, 'https://corsproxy.io/?url=' + encodeURIComponent(f.url)]) {
+  for (const u of [f.url, ...(myProxy() ? [viaMyProxy(f.url)] : []), 'https://corsproxy.io/?url=' + encodeURIComponent(f.url)]) {
     try {
       const desc = { weight: f.weight, style: f.style };
       if (f.range) desc.unicodeRange = f.range;
