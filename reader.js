@@ -191,8 +191,7 @@ async function importArticle(url, titleHint = '') {
   host.innerHTML = `<div class="r-loading"><div class="spinner"></div><p>Sayfa sadeleştiriliyor…</p><p class="sub">${esc(titleHint || url)}</p></div>`;
   const errs = [];
   // site düzeni açıksa orijinal HTML'i metinle aynı anda getirmeye başla
-  const htmlP = siteLayoutOn() ? fetchPageHTML(url).catch(() => null) : Promise.resolve(null);
-  const directHTML = (h) => { try { return okHTML(h, 'okuma'); } catch { return null; } };
+
   for (const [name, fn] of READ_SVCS) {
     try {
       const a = await fn(url);
@@ -205,7 +204,7 @@ async function importArticle(url, titleHint = '') {
         createdAt: now(), progress: 0, scrollY: 0, trans: {}, via: name
       };
       if (siteLayoutOn()) {
-        host.innerHTML = `<div class="r-loading"><div class="spinner"></div><p>Sitenin düzeni ölçülüyor…</p><p class="sub">${esc(art.title)}</p>
+        host.innerHTML = `<div class="r-loading"><div class="spinner"></div><p>Sitenin düzeni ölçülüyor… <span class="sub" id="rLayoutStep"></span></p><p class="sub">${esc(art.title)}</p>
           <button class="ghost" id="rSkipLayout">Atla</button></div>`;
         let skip;
         const skipP = new Promise((res) => (skip = res));
@@ -213,14 +212,15 @@ async function importArticle(url, titleHint = '') {
         try {
           art.layout = await Promise.race([
             (async () => {
-              const got = (a.html && directHTML(a.html)) || (await withTimeout(htmlP, 16000).catch(() => null));
-              if (!got) return null;
-              const L = await measureLayout(got.html, url, blocks).catch((e) => { store.set('lastLayoutErr', e.message + ' — kaynak: ' + got.src); return null; });
-              if (L) L.src = got.src;
+              const { L, errs } = await layoutFromSources(url, blocks, a.html || null, (src) => {
+                const el = $('#rLayoutStep');
+                if (el) el.textContent = src;
+              });
+              art.layoutErr = L ? '' : errs.join(' · ');
               return L;
             })(),
             skipP,
-            new Promise((res) => setTimeout(() => res(null), 30000))
+            new Promise((res) => setTimeout(() => res(null), 60000))
           ]);
         } catch { art.layout = null; }
       }
@@ -598,7 +598,7 @@ function renderPrefs() {
   let siteNote = '';
   if (readPrefs.font === 'auto') {
     if (!siteLayoutOn()) siteNote = '<div class="legend">Site düzeni Ayarlar’dan kapalı; genel görünüm kullanılıyor.</div>';
-    else if (!a?.layout || badLayout(a.layout)) siteNote = '<div class="legend"><span id="rLayoutMsg">Bu yazı için sitenin düzeni alınamadı ya da henüz alınmadı.</span> <button class="ghost" id="rMeasure">Sitenin düzenini al</button></div>';
+    else if (!a?.layout || badLayout(a.layout)) siteNote = `<div class="legend"><span id="rLayoutMsg">${a?.layoutErr ? 'Ölçülemedi — ' + esc(a.layoutErr) : 'Bu yazı için sitenin düzeni henüz alınmadı.'}</span> <button class="ghost" id="rMeasure">Sitenin düzenini al</button></div>`;
     else siteNote = `<div class="legend"><span id="rLayoutMsg">Sitenin ölçüleri: ${a.layout.p.size}px yazı, ${Math.round(a.layout.W - a.layout.left - a.layout.right)}px sütun${a.layout.faces.length ? ', sitenin yazı tipi' : ', benzer yazı tipi'}${a.layout.src ? ' (' + esc(a.layout.src) + ')' : ''}.</span> <button class="ghost" id="rMeasure">Yeniden ölç</button></div>`;
   }
   p.innerHTML = `

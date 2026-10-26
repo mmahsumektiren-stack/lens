@@ -51,14 +51,43 @@ function okHTML(t, src) {
   return { html: t, src };
 }
 const textOk = (r) => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)));
-// sayfanın orijinal HTML'i: kaynaklar yarışır, stil içermeyen yanıt elenir
+// sayfanın orijinal HTML kaynakları, öncelik sırasıyla (kendi vekilin önce: sayfayı CSS bağlantılarıyla olduğu gibi getirir)
+function htmlSources(url) {
+  const list = [];
+  if (myProxy()) list.push(['vekil', () => fetchWithTimeout(viaMyProxy(url), {}, 20000).then(textOk)]);
+  list.push(['jina', () => jinaHTML(url)]);
+  list.push(['allorigins', () => fetchWithTimeout('https://api.allorigins.win/raw?url=' + encodeURIComponent(url), {}, 12000).then(textOk)]);
+  list.push(['corsproxy', () => fetchWithTimeout('https://corsproxy.io/?url=' + encodeURIComponent(url), {}, 12000).then(textOk)]);
+  return list;
+}
+// eski arayüz: ilk geçerli HTML
 function fetchPageHTML(url) {
-  const tries = [];
-  if (myProxy()) tries.push(fetchWithTimeout(viaMyProxy(url), {}, 15000).then(textOk).then((t) => okHTML(t, 'vekil')));
-  tries.push(jinaHTML(url).then((t) => okHTML(t, 'jina')));
-  tries.push(fetchWithTimeout('https://api.allorigins.win/raw?url=' + encodeURIComponent(url), {}, 15000).then(textOk).then((t) => okHTML(t, 'allorigins')));
-  tries.push(fetchWithTimeout('https://corsproxy.io/?url=' + encodeURIComponent(url), {}, 15000).then(textOk).then((t) => okHTML(t, 'corsproxy')));
-  return Promise.any(tries);
+  return Promise.any(htmlSources(url).map(([src, fn]) => fn().then((t) => okHTML(t, src))));
+}
+// kaynakları sırayla dene: HTML'i al ve ölç; ilk başarılı ölçüm kazanır. Hepsi başarısızsa nedenleri topla.
+async function layoutFromSources(url, blocks, preHTML = null, onStep = () => {}) {
+  const errs = [];
+  const sources = htmlSources(url);
+  // içeri alma sırasında zaten indirilmiş HTML varsa (okuma servisi) onu en sona ekle
+  if (preHTML) sources.push(['okuma', async () => preHTML]);
+  for (const [src, fn] of sources) {
+    onStep(src);
+    let html;
+    try {
+      html = okHTML(await withTimeout(fn(), 22000), src).html;
+    } catch (e) {
+      errs.push(`${src}: ${String(e.message || 'erişilemedi').replace(src + ': ', '')}`);
+      continue;
+    }
+    try {
+      const L = await withTimeout(measureLayout(html, url, blocks), 40000);
+      L.src = src;
+      return { L, errs };
+    } catch (e) {
+      errs.push(`${src}: ${e.message}`);
+    }
+  }
+  return { L: null, errs };
 }
 
 const normTxt = (s) => String(s || '').replace(/[’‘]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -239,24 +268,16 @@ ${L.h1 ? `#view-reader.site .r-title { font-family: ${L.h1.family}${fb}; font-si
 }
 
 async function remeasureArticle(a, statusEl) {
-  try {
-    if (statusEl) statusEl.textContent = 'Sitenin düzeni ölçülüyor…';
-    const got = await fetchPageHTML(a.url);
-    let L = null;
-    try {
-      L = await withTimeout(measureLayout(got.html, a.url, a.blocks), 40000);
-    } catch (e) {
-      a.layout = null; // bozuk eski ölçümü temizle
-      await saveArticle(a);
-      throw new Error(`${e.message} — kaynak: ${got.src}`);
-    }
-    L.src = got.src;
+  const { L, errs } = await layoutFromSources(a.url, a.blocks, null, (src) => { if (statusEl) statusEl.textContent = `Sitenin düzeni ölçülüyor… (${src})`; });
+  if (L) {
     a.layout = L;
+    a.layoutErr = '';
     await saveArticle(a);
     return true;
-  } catch (e) {
-    const why = e.errors ? e.errors.map((x) => x.message).join(' · ') : e.message;
-    if (statusEl) statusEl.textContent = 'Ölçülemedi: ' + why;
-    return false;
   }
+  a.layout = null; // bozuk eski ölçümü temizle
+  a.layoutErr = errs.join(' · ');
+  await saveArticle(a);
+  if (statusEl) statusEl.textContent = 'Ölçülemedi — ' + a.layoutErr;
+  return false;
 }
