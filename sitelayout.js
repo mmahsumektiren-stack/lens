@@ -40,13 +40,25 @@ async function jinaHTML(url, ms = 20000) {
   return r.text();
 }
 // sayfanın HTML'i: Jina + (varsa) yedek vekiller yarışır, ilk geçerli yanıt kazanır
+// HTML ölçüme uygun mu: sitenin stil dosyası bağlantısı ya da kayda değer satır içi CSS içermeli
+function hasStyles(h) {
+  if (/<link[^>]+rel=["']?[^"'>]*stylesheet/i.test(h)) return true;
+  return (h.match(/<style[\s>][\s\S]*?<\/style>/gi) || []).join('').length > 1500;
+}
+function okHTML(t, src) {
+  if (!/<p[\s>]/i.test(t)) throw new Error(src + ': HTML yok');
+  if (!hasStyles(t)) throw new Error(src + ': stil dosyası yok');
+  return { html: t, src };
+}
+const textOk = (r) => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)));
+// sayfanın orijinal HTML'i: kaynaklar yarışır, stil içermeyen yanıt elenir
 function fetchPageHTML(url) {
-  return Promise.any([
-    jinaHTML(url),
-    ...(myProxy() ? [fetchWithTimeout(viaMyProxy(url), {}, 15000).then((r) => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))))] : []),
-    fetchWithTimeout('https://api.allorigins.win/raw?url=' + encodeURIComponent(url), {}, 15000).then((r) => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)))),
-    fetchWithTimeout('https://corsproxy.io/?url=' + encodeURIComponent(url), {}, 15000).then((r) => (r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status))))
-  ]).then((t) => (/<p[\s>]/i.test(t) ? t : Promise.reject(new Error('HTML yok'))));
+  const tries = [];
+  if (myProxy()) tries.push(fetchWithTimeout(viaMyProxy(url), {}, 15000).then(textOk).then((t) => okHTML(t, 'vekil')));
+  tries.push(jinaHTML(url).then((t) => okHTML(t, 'jina')));
+  tries.push(fetchWithTimeout('https://api.allorigins.win/raw?url=' + encodeURIComponent(url), {}, 15000).then(textOk).then((t) => okHTML(t, 'allorigins')));
+  tries.push(fetchWithTimeout('https://corsproxy.io/?url=' + encodeURIComponent(url), {}, 15000).then(textOk).then((t) => okHTML(t, 'corsproxy')));
+  return Promise.any(tries);
 }
 
 const normTxt = (s) => String(s || '').replace(/[’‘]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -128,6 +140,9 @@ async function measureLayout(html, url, blocks) {
     if (!(width > 150 && width <= W + 1 && left >= 0)) return null;
     const size = px(cs.fontSize);
     if (!(size >= 11 && size <= 32)) return null;
+    const bodyCs = win.getComputedStyle(doc.body);
+    const looksDefault = /times/i.test(cs.fontFamily) && size === 16 && cs.lineHeight === 'normal' && Math.round(px(bodyCs.marginLeft) || 0) === 8;
+    if (looksDefault || ![...doc.styleSheets].some((sh) => { try { return sh.href || sh.cssRules.length > 5; } catch { return true; } })) return null;
 
     const h1 = doc.querySelector('h1');
     const hs = h1 ? win.getComputedStyle(h1) : null;
@@ -172,8 +187,12 @@ function ensureFaces(L) {
     } catch {}
   }
 }
+// eski sürümde stilsiz sayfadan alınmış bozuk ölçüm (tarayıcı varsayılanı) — yok say
+function badLayout(L) {
+  return !L || !L.p || (/times/i.test(L.p.family) && L.p.size === 16 && L.p.lh === 'normal' && Math.round(L.left) === 8);
+}
 function siteLayoutActive(a) {
-  return !!(a && a.layout && siteLayoutOn() && readPrefs.font === 'auto');
+  return !!(a && a.layout && !badLayout(a.layout) && siteLayoutOn() && readPrefs.font === 'auto');
 }
 function cssLen(v) { return v && v !== 'normal' ? v : 'normal'; }
 function applySiteLayout(a) {
@@ -202,14 +221,20 @@ ${L.h1 ? `#view-reader.site .r-title { font-family: ${L.h1.family}${fb}; font-si
 async function remeasureArticle(a, statusEl) {
   try {
     if (statusEl) statusEl.textContent = 'Sitenin düzeni ölçülüyor…';
-    const html = await fetchPageHTML(a.url);
-    const L = await withTimeout(measureLayout(html, a.url, a.blocks), 25000);
-    if (!L) throw new Error('bu sayfada yazı paragrafı bulunamadı');
+    const got = await fetchPageHTML(a.url);
+    const L = await withTimeout(measureLayout(got.html, a.url, a.blocks), 25000);
+    if (!L) {
+      a.layout = null; // bozuk eski ölçümü temizle
+      await saveArticle(a);
+      throw new Error('sitenin stili okunamadı');
+    }
+    L.src = got.src;
     a.layout = L;
     await saveArticle(a);
     return true;
   } catch (e) {
-    if (statusEl) statusEl.textContent = 'Ölçülemedi: ' + (e.errors ? 'sayfa getirilemedi' : e.message);
+    const why = e.errors ? e.errors.map((x) => x.message).join(' · ') : e.message;
+    if (statusEl) statusEl.textContent = 'Ölçülemedi: ' + why;
     return false;
   }
 }

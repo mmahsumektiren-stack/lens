@@ -192,6 +192,7 @@ async function importArticle(url, titleHint = '') {
   const errs = [];
   // site düzeni açıksa orijinal HTML'i metinle aynı anda getirmeye başla
   const htmlP = siteLayoutOn() ? fetchPageHTML(url).catch(() => null) : Promise.resolve(null);
+  const directHTML = (h) => { try { return okHTML(h, 'okuma'); } catch { return null; } };
   for (const [name, fn] of READ_SVCS) {
     try {
       const a = await fn(url);
@@ -212,8 +213,11 @@ async function importArticle(url, titleHint = '') {
         try {
           art.layout = await Promise.race([
             (async () => {
-              const html = a.html || (await withTimeout(htmlP, 16000).catch(() => null));
-              return html ? await measureLayout(html, url, blocks) : null;
+              const got = (a.html && directHTML(a.html)) || (await withTimeout(htmlP, 16000).catch(() => null));
+              if (!got) return null;
+              const L = await measureLayout(got.html, url, blocks);
+              if (L) L.src = got.src;
+              return L;
             })(),
             skipP,
             new Promise((res) => setTimeout(() => res(null), 30000))
@@ -594,8 +598,8 @@ function renderPrefs() {
   let siteNote = '';
   if (readPrefs.font === 'auto') {
     if (!siteLayoutOn()) siteNote = '<div class="legend">Site düzeni Ayarlar’dan kapalı; genel görünüm kullanılıyor.</div>';
-    else if (!a?.layout) siteNote = '<div class="legend"><span id="rLayoutMsg">Bu yazı için sitenin düzeni henüz alınmadı.</span> <button class="ghost" id="rMeasure">Sitenin düzenini al</button></div>';
-    else siteNote = `<div class="legend">Sitenin ölçüleri: ${a.layout.p.size}px yazı, ${Math.round(a.layout.W - a.layout.left - a.layout.right)}px sütun${a.layout.faces.length ? ', sitenin yazı tipi' : ', benzer yazı tipi'}.</div>`;
+    else if (!a?.layout || badLayout(a.layout)) siteNote = '<div class="legend"><span id="rLayoutMsg">Bu yazı için sitenin düzeni henüz alınmadı.</span> <button class="ghost" id="rMeasure">Sitenin düzenini al</button></div>';
+    else siteNote = `<div class="legend"><span id="rLayoutMsg">Sitenin ölçüleri: ${a.layout.p.size}px yazı, ${Math.round(a.layout.W - a.layout.left - a.layout.right)}px sütun${a.layout.faces.length ? ', sitenin yazı tipi' : ', benzer yazı tipi'}${a.layout.src ? ' (' + esc(a.layout.src) + ')' : ''}.</span> <button class="ghost" id="rMeasure">Yeniden ölç</button></div>`;
   }
   p.innerHTML = `
     <div class="pref"><span>Görünüm</span><div class="seg">${looks.map(([k, l]) => `<button data-font="${k}" class="${readPrefs.font === k ? 'on' : ''}"${k === 'serif' ? ' style="font-family:Georgia,serif"' : ''}>${l}</button>`).join('')}</div></div>
@@ -636,7 +640,12 @@ function bindReader() {
     if (!b) return;
     if (b.id === 'rMeasure') {
       b.disabled = true;
-      remeasureArticle(rd.art, $('#rLayoutMsg')).then((ok) => { if (ok) { applyReadPrefs(); renderPrefs(); } else b.disabled = false; });
+      remeasureArticle(rd.art, $('#rLayoutMsg')).then((ok) => {
+        const msg = $('#rLayoutMsg')?.textContent;
+        applyReadPrefs();
+        renderPrefs();
+        if (!ok && $('#rLayoutMsg')) $('#rLayoutMsg').textContent = msg;
+      });
       return;
     }
     if (b.dataset.size) store.set('readSize', +b.dataset.size);
