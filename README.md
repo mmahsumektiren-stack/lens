@@ -39,7 +39,10 @@ Paylaş menüsü ve kurulum için site **HTTPS** üzerinden açılmalı.
 ## Okuma (web sayfaları)
 
 - Chrome'da bir haberi aç → ⋮ → **Paylaş** → **Lens**. Sayfa sade okuyucuda açılır ve **Oku** sekmesine kaydedilir (offline da okunur).
-- Kelimeye dokun → alt panelde anlam, telaffuz, cümle çevirisi. **↔ Kalıp seç** → son kelimeye dokun ("shut down" gibi).
+- Kelimeye dokun → alt panelde anlam, telaffuz, cümle çevirisi. Kalıp için kelimeye **basılı tut ve sürükle** ("shut down"), ya da **↔ Kalıp seç** → son kelimeye dokun.
+- **📚 Sözlük**: Cambridge, Oxford Learner's, Longman, Merriam-Webster, Tureng, Cambridge İng→Tr, YouGlish, Urban. Tek kelimede kök hali gönderilir (squeezing → squeeze).
+- Yazının sonunda **baktığın kelimeler** listelenir; seçilenleri tek dokunuşla karta çevir.
+- Kütüphanede her yazının **tahmini seviyesi** (Oxford listesine göre A2–C1+) ve zor kelime sayısı görünür.
 - **¶ Çevir** paragrafın Türkçesini altına ekler, **¶ Dinle** / 🎧 sesli okur.
 - **Aa**: görünüm (Orijinale yakın / Kitap), yazı boyutu, tema (oto/açık/sepya/koyu), Oxford vurgu seviyesi.
 - Altı çizili = Oxford 3000/5000 listesinde (seçtiğin seviye ve üstü), noktalı = kartlarında var.

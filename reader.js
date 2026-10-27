@@ -15,9 +15,18 @@ async function loadOxford() {
   return OX;
 }
 // basit kök bulma: tariffs → tariff, announced → announce, studies → study
+const IRREGULAR = (() => {
+  const m = {};
+  'am is are was were been being:be|has had having:have|does did done doing:do|said says:say|went gone goes:go|got gotten:get|made:make|took taken:take|saw seen:see|came:come|knew known:know|thought:think|gave given:give|found:find|told:tell|became:become|left:leave|felt:feel|brought:bring|began begun:begin|kept:keep|held:hold|wrote written:write|stood:stand|heard:hear|meant:mean|met:meet|ran:run|paid:pay|sat:sit|spoke spoken:speak|led:lead|grew grown:grow|lost:lose|fell fallen:fall|sent:send|built:build|understood:understand|drew drawn:draw|broke broken:break|spent:spend|rose risen:rise|drove driven:drive|bought:buy|wore worn:wear|chose chosen:choose|sought:seek|threw thrown:throw|caught:catch|dealt:deal|won:win|forgot forgotten:forget|sold:sell|fought:fight|taught:teach|ate eaten:eat|sang sung:sing|drank drunk:drink|slept:sleep|flew flown:fly|hid hidden:hide|shot:shoot|fed:feed|rode ridden:ride|shook shaken:shake|stole stolen:steal|woke woken:wake|bore born:bear|beaten:beat|bit bitten:bite|blew blown:blow|dug:dig|hung:hang|laid:lay|lent:lend|lit:light|shone:shine|sank sunk:sink|stuck:stick|struck:strike|swam swum:swim|swung:swing|tore torn:tear|froze frozen:freeze|forgave forgiven:forgive|arose arisen:arise|fled:flee|bent:bend|bound:bind|sped:speed|swore sworn:swear|wept:weep|withdrew withdrawn:withdraw|undertook undertaken:undertake|overcame:overcome|men:man|women:woman|children:child|feet:foot|teeth:tooth|mice:mouse|better best:good|worse worst:bad|further furthest farther farthest:far|lives:life|wives:wife|knives:knife|leaves:leaf|halves:half|selves:self|analyses:analysis|crises:crisis|criteria:criterion|phenomena:phenomenon|data:data|media:media'.split('|').forEach((g) => { const [forms, base] = g.split(':'); forms.split(' ').forEach((f) => (m[f] = base)); });
+  return m;
+})();
 function lemmaCandidates(w) {
-  w = w.toLowerCase().replace(/[’']s$/, '').replace(/[’']/g, "'");
+  w = w.toLowerCase().replace(/[’]/g, "'").replace(/'s$/, '');
+  // kısaltmalar: don't → do, we'll → we, can't → can, won't → will
+  if (/n't$/.test(w)) w = { "won't": 'will', "can't": 'can', "shan't": 'shall', "ain't": 'be' }[w] || w.slice(0, -3);
+  else w = w.replace(/'(ll|re|ve|d|m)$/, '');
   const c = [w];
+  if (IRREGULAR[w]) c.unshift(IRREGULAR[w]);
   const add = (x) => x.length > 1 && !c.includes(x) && c.push(x);
   if (w.endsWith('ies')) add(w.slice(0, -3) + 'y');
   if (w.endsWith('es')) add(w.slice(0, -2));
@@ -301,12 +310,14 @@ async function importTextArticle(text, title = '', url = '') {
 async function renderLibrary() {
   await loadArticles();
   const list = articles.slice().sort((a, b) => (b.lastOpened || b.createdAt) - (a.lastOpened || a.createdAt));
+  await ensureDifficulty(list);
   $('#libList').innerHTML = list.length ? list.map((a) => `
     <li class="lib-item" data-open="${a.id}">
       ${a.image ? `<img src="${esc(a.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
       <div class="lib-txt">
         <div class="lib-title">${esc(a.title)}</div>
         <div class="sub">${esc(a.site)} · ${a.minutes} dk${a.progress > 0.97 ? ' · bitti ✓' : a.progress > 0.02 ? ` · %${Math.round(a.progress * 100)}` : ''}</div>
+        ${a.diff ? `<div class="lib-diff">${diffBadge(a)}${a.looked?.length ? ` <span class="sub">· ${a.looked.length} kelimeye baktın</span>` : ''}</div>` : ''}
         <div class="lib-bar"><span style="width:${Math.round((a.progress || 0) * 100)}%"></span></div>
       </div>
       <button class="lib-del" data-del="${a.id}" aria-label="Sil">✕</button>
@@ -375,7 +386,8 @@ function renderArticle() {
     </header>
     ${a.image && !a.blocks.some((x) => x.t === 'img') ? `<img class="r-img" src="${esc(a.image)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
     <div class="r-text">${parts.join('')}</div>
-    <footer class="r-end"><a href="${esc(a.url)}" target="_blank" rel="noopener">Orijinal sayfa ↗</a></footer>`;
+    <section class="r-sum" id="rSum">${endSummaryHTML(a)}</section>
+    <footer class="r-end">${a.url ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">Orijinal sayfa ↗</a>` : ''}</footer>`;
   if (rd.sel) markSelection();
 }
 
@@ -445,13 +457,17 @@ async function openSheet() {
       <button class="ghost${rd.extend ? ' on' : ''}" id="shExt">↔ Kalıp seç</button>
       <button class="ghost" id="shTr">¶ Çevir</button>
       <button class="ghost" id="shRead">¶ Dinle</button>
-    </div>`;
+      <button class="ghost" id="shDictBtn">📚 Sözlük</button>
+    </div>
+    <div id="shDict" class="sh-dict" hidden></div>`;
+  recordLooked(term, sentence);
   if (!settings.apiKey) return;
   const key = term.toLowerCase() + '|' + sentence;
   try {
     let ai = rd.cache.get(key) || (inCards?.ai ?? null);
     if (!ai) ai = await askGemini(term, sentence);
     rd.cache.set(key, ai);
+    updateEndSummary(); // yazı sonu listesinde anlamı göster
     if (!rd.sel || selectionInfo().term !== term) return; // bu arada başka kelimeye dokunuldu
     if (ai.ipa && $('.sh-ipa')) $('.sh-ipa').textContent = ai.ipa;
     $('#shBody').innerHTML = `
@@ -587,11 +603,27 @@ function renderPrefs() {
 }
 
 function bindReader() {
-  $('#readerBody').addEventListener('click', onReaderTap);
+  $('#readerBody').addEventListener('click', (e) => {
+    if (e.target.closest('#sumAdd')) return addLookedToCards();
+    if (e.target.closest('#rSum')) return; // onay kutuları paneli kapatmasın
+    onReaderTap(e);
+  });
+  bindDragSelect();
   $('#sheet').addEventListener('click', (e) => {
     const sp = e.target.closest('[data-speak]');
     if (sp) return speak(sp.dataset.speak);
     if (e.target.closest('#shClose')) return closeSheet();
+    if (e.target.closest('#shDictBtn')) {
+      const box = $('#shDict');
+      box.hidden = !box.hidden;
+      if (!box.hidden) {
+        box.innerHTML = dictPanelHTML(selectionInfo().term);
+        box.scrollIntoView({ block: 'nearest' });
+      }
+      return;
+    }
+    const dl = e.target.closest('[data-dict]');
+    if (dl) { store.set('dictLast', dl.dataset.dict); return; } // bağlantı normal açılır
     if (e.target.closest('#shAdd')) return addSelectionToCards();
     if (e.target.closest('#shExt')) {
       rd.extend = !rd.extend;
