@@ -198,19 +198,40 @@ async function importArticle(url, titleHint = '') {
   url = normUrl(url);
   await loadArticles();
   const existing = articles.find((a) => a.url === url);
-  if (existing) return openArticle(existing.id);
+  if (existing && !looksBlocked(existing.title, existing.blocks)) return openArticle(existing.id);
+  if (existing) { await DB.del(existing.id, 'articles'); articles = articles.filter((x) => x !== existing); } // eski engel sayfası kaydını at
   show('reader');
   const host = $('#readerBody');
   $('#readerSite').textContent = hostOf(url);
   host.innerHTML = `<div class="r-loading"><div class="spinner"></div><p>Sayfa sadeleştiriliyor…</p><p class="sub">${esc(titleHint || url)}</p></div>`;
   const errs = [];
-  // site düzeni açıksa orijinal HTML'i metinle aynı anda getirmeye başla
+  // Reddit Jina'yı engelliyor: gönderinin JSON'unu telefondan doğrudan iste
+  if (isReddit(url)) {
+    try {
+      const { j, path } = await fetchReddit(url);
+      const a = redditToArticle(j, path);
+      const key = 'reddit:' + ((path.match(/\/comments\/([a-z0-9]+)/i) || [])[1] || path);
+      const same = articles.find((x) => x.key === key);
+      if (same) return openArticle(same.id); // aynı gönderi başka bir bağlantıyla eklenmiş
+      const blocks = a.blocks.filter((b) => b.t === 'img' || (b.text && b.text.trim()));
+      const words = blocks.filter((b) => b.text).reduce((n, b) => n + b.text.split(/\s+/).length, 0);
+      const art = {
+        id: uid(), url, key, title: a.title, site: a.site, byline: a.byline, published: a.published, image: a.image,
+        blocks, words, minutes: Math.max(1, Math.round(words / 200)), createdAt: now(), progress: 0, scrollY: 0, trans: {}, via: 'reddit'
+      };
+      await saveArticle(art);
+      return openArticle(art.id);
+    } catch (e) {
+      errs.push('reddit: ' + (e.message || 'erişilemedi'));
+    }
+  }
 
   for (const [name, fn] of READ_SVCS) {
     try {
       const a = await fn(url);
       const blocks = tidyBlocks(a.blocks || [], cleanTitle(a.title || titleHint));
       const words = blocks.filter((b) => b.text).reduce((n, b) => n + b.text.split(/\s+/).length, 0);
+      if (looksBlocked(a.title, blocks)) { errs.push(name + ': engel sayfası geldi (bot koruması)'); continue; }
       if (words < 40) { errs.push(name + ': metin çok kısa (muhtemelen bot doğrulaması)'); continue; }
       const art = {
         id: uid(), url, title: cleanTitle(a.title || titleHint, a.site) || hostOf(url), site: a.site || hostOf(url), byline: a.byline || '',
@@ -224,7 +245,7 @@ async function importArticle(url, titleHint = '') {
     }
   }
   store.set('failedImport', { url, title: titleHint, at: now() });
-  const blocked = errs.some((e) => /metin çok kısa|HTTP 40[13]|HTTP 451/.test(e));
+  const blocked = errs.some((e) => /metin çok kısa|engel sayfası|HTTP 40[13]|HTTP 451/.test(e));
   host.innerHTML = `<div class="r-loading fail">
     <p><b>Bu sayfa getirilemedi.</b></p>
     <p>${blocked ? 'Bu site otomatik erişimi engelliyor (bot koruması). Uzaktan hiçbir servis sayfayı alamıyor, ama sen tarayıcında zaten görüyorsun:' : 'Okuma servislerine ulaşılamadı. Tekrar deneyebilir ya da metni tarayıcından gönderebilirsin:'}</p>
@@ -309,6 +330,9 @@ async function importTextArticle(text, title = '', url = '') {
 /* ---------- kütüphane ---------- */
 async function renderLibrary() {
   await loadArticles();
+  // eski sürümlerde yazı sanılıp kaydedilmiş engel sayfalarını temizle
+  for (const a of articles.filter((x) => looksBlocked(x.title, x.blocks))) await DB.del(a.id, 'articles');
+  articles = articles.filter((x) => !looksBlocked(x.title, x.blocks));
   const list = articles.slice().sort((a, b) => (b.lastOpened || b.createdAt) - (a.lastOpened || a.createdAt));
   await ensureDifficulty(list);
   $('#libList').innerHTML = list.length ? list.map((a) => `

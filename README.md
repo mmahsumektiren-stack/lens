@@ -48,6 +48,8 @@ Paylaş menüsü ve kurulum için site **HTTPS** üzerinden açılmalı.
 - Altı çizili = Oxford 3000/5000 listesinde (seçtiğin seviye ve üstü), noktalı = kartlarında var.
 - Sayfa metni Jina Reader (r.jina.ai) ile çekilir (Markdown, gerekirse HTML + Mozilla Readability); bu servise sadece sayfanın linki gider.
 - Sayfada kısa bir metni **seçip** paylaşırsan Ekle ekranına gelir; uzun metin (60+ kelime) okuyucuda yazı olarak açılır.
+- **Reddit**: gönderiler başlık, metin ve en iyi yorumlarla açılır (Reddit'in herkese açık JSON'u telefondan doğrudan istenir; paylaş bağlantıları `/s/…` da çözülür).
+- Engel / doğrulama sayfaları ("blocked by network security", "verify you are human" …) yazı olarak kaydedilmez.
 - **Bot korumalı siteler** (Reuters vb.) uzaktan okunamaz: sayfada uzun bas → **Tümünü seç** → **Paylaş → Lens**. Menü/fotoğraf açıklaması ayıklanır, başlık ve kaynak linki az önce açılamayan sayfadan alınır.
 - **Ayarlar → Bağlantıları test et**: Jina ve fxtwitter'a telefondan erişilebiliyor mu gösterir.
 
