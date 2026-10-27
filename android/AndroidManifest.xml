@@ -33,6 +33,27 @@
             </intent-filter>
         </activity>
 
+        <!-- Hızlı ayarlar kutucuğu: panodaki metni Lens'te aç -->
+        <service
+            android:name=".LensTileService"
+            android:label="@string/tile_label"
+            android:icon="@drawable/ic_tile"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <!-- Kutucuktan açılan görünmez pencere (panoyu okumak için öne gelmesi gerekir) -->
+        <activity
+            android:name=".ClipActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <!-- Uygulama simgesine dokununca: kısa bilgi + Lens'i aç -->
         <activity
             android:name=".InfoActivity"

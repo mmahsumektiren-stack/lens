@@ -2,7 +2,11 @@
 <resources>
     <string name="app_name">Lens Seçim</string>
     <string name="menu_label">Lens</string>
-    <string name="info_text">Lens artık seçim menüsünde.\n\nHerhangi bir uygulamada İngilizce bir metni seç → açılan menüde (gerekirse ⋮ altında) <b>Lens</b>\'e dokun. Metin Lens\'te açılır.\n\nLens uygulamasının (Chrome\'dan yüklenen) telefonda kurulu olması gerekir.</string>
+    <string name="info_text">Lens artık seçim menüsünde.\n\nHerhangi bir uygulamada İngilizce bir metni seç → açılan menüde (gerekirse ⋮ altında) <b>Lens</b>\'e dokun. Metin Lens\'te açılır.\n\nSeçim menüsü olmayan uygulamalarda (ör. X): metni <b>Kopyala</b> → bildirim panelini aşağı çek → <b>Lens</b> kutucuğu.\n\nLens uygulamasının (Chrome\'dan yüklenen) telefonda kurulu olması gerekir.</string>
     <string name="open_lens">Lens\'i aç</string>
+    <string name="tile_label">Lens</string>
+    <string name="add_tile">Hızlı ayarlara ekle</string>
+    <string name="tile_added">Lens kutucuğu eklendi. Kopyala → paneli aşağı çek → Lens.</string>
+    <string name="tile_manual">Paneli aşağı çek → düzenle (kalem) → Lens kutucuğunu sürükle.</string>
     <string name="not_found">Lens açılamadı. Chrome\'dan Lens\'i yükleyip tekrar dene.</string>
 </resources>
