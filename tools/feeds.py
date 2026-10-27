@@ -19,11 +19,17 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
-UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
+# Bazı siteler dürüst bot kimliğine izin verip sahte tarayıcıyı engelliyor, bazıları tersi: ikisi de denenir
+UAS = ['Mozilla/5.0 (compatible; LensFeedBot/1.0; +https://github.com/mmahsumektiren-stack/lens)',
+       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36']
 
 # kategori: trend (Gündemde), tech, world, ent (Magazin), blogs, read (Okuma)
 SOURCES = [
     # öğrenci dostu
+    {'id': 'newsinlevels', 'name': 'News in Levels', 'cat': 'world', 'home': 'https://www.newsinlevels.com/',
+     'feeds': ['https://www.newsinlevels.com/feed/']},
+    {'id': 'bne', 'name': 'Breaking News English', 'cat': 'world', 'home': 'https://breakingnewsenglish.com/',
+     'feeds': ['https://breakingnewsenglish.com/feed.xml', 'https://breakingnewsenglish.com/rss.xml'], 'max_age_days': 21},
     {'id': 'voa-le', 'name': 'VOA Learning English', 'cat': 'world', 'home': 'https://learningenglish.voanews.com/',
      'pick_newest': True,  # onlarca alt akışı var; en güncel yazıları olanı seç
      'feeds': ['https://learningenglish.voanews.com/api/', 'https://learningenglish.voanews.com/api/zmg_pl-vomx-tpeymtm',
@@ -33,7 +39,7 @@ SOURCES = [
                'https://learningenglish.voanews.com/api/zj-pqrl-vomx-tpebyyqo', 'https://learningenglish.voanews.com/api/zqmiqol-vomx-tpei-mqp']},
     # gündem
     {'id': 'hn', 'name': 'Hacker News', 'cat': 'trend', 'home': 'https://news.ycombinator.com/',
-     'feeds': ['https://hnrss.org/frontpage?points=250&count=50'], 'max_age_days': 4, 'per_source': 25, 'external': True},
+     'feeds': ['https://hnrss.org/frontpage?points=250&count=50', 'https://hnrss.org/best?count=50', 'https://news.ycombinator.com/rss'], 'max_age_days': 4, 'per_source': 25, 'external': True},
     {'id': 'techmeme', 'name': 'Techmeme', 'cat': 'trend', 'home': 'https://www.techmeme.com/',
      'feeds': ['https://www.techmeme.com/feed.xml'], 'max_age_days': 3, 'per_source': 15, 'external': True},
     # teknoloji / yapay zeka
@@ -55,8 +61,6 @@ SOURCES = [
     # magazin / eğlence
     {'id': 'polygon', 'name': 'Polygon', 'cat': 'ent', 'home': 'https://www.polygon.com/',
      'feeds': ['https://www.polygon.com/rss/index.xml']},
-    {'id': 'avclub', 'name': 'The A.V. Club', 'cat': 'ent', 'home': 'https://www.avclub.com/',
-     'feeds': ['https://www.avclub.com/rss']},
     {'id': 'nme', 'name': 'NME', 'cat': 'ent', 'home': 'https://www.nme.com/',
      'feeds': ['https://www.nme.com/feed']},
     {'id': 'bbc-ent', 'name': 'BBC Entertainment', 'cat': 'ent', 'home': 'https://www.bbc.com/news/entertainment_and_arts',
@@ -103,9 +107,30 @@ NS = {
 
 
 def fetch(url, timeout=25, accept='*/*'):
-    req = urllib.request.Request(url, headers={'User-Agent': UA, 'Accept': accept, 'Accept-Language': 'en-US,en;q=0.9'})
+    last = None
+    for ua in UAS:
+        req = urllib.request.Request(url, headers={'User-Agent': ua, 'Accept': accept, 'Accept-Language': 'en-US,en;q=0.9'})
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                return r.read(), r.geturl(), r.headers.get('Content-Type', '')
+        except urllib.error.HTTPError as e:
+            last = e
+            if e.code not in (401, 403, 406, 429):
+                raise
+    raise last
+
+
+def fetch_via_jina(url, timeout=40):
+    """Bot korumalı akışlar için son çare: Jina üzerinden ham içerik."""
+    req = urllib.request.Request('https://r.jina.ai/' + url, headers={'User-Agent': UAS[0], 'X-Return-Format': 'text', 'Accept': 'text/plain'})
     with urllib.request.urlopen(req, timeout=timeout) as r:
-        return r.read(), r.geturl(), r.headers.get('Content-Type', '')
+        body = r.read().decode('utf-8', 'replace')
+    i = body.find('<?xml')
+    if i < 0:
+        i = min([x for x in (body.find('<rss'), body.find('<feed')) if x >= 0] or [-1])
+    if i < 0:
+        raise ValueError('Jina yanıtında XML yok')
+    return body[i:].encode('utf-8')
 
 
 def clean_text(s, limit=280):
@@ -225,6 +250,14 @@ def feed_candidates(src, errors):
                     errors.append(f'{u}: boş akış')
             except Exception as e:
                 errors.append(f'{u}: {type(e).__name__}: {str(e)[:120]}')
+                if url == '__discover__' or not isinstance(e, urllib.error.HTTPError) or e.code not in (401, 403, 429):
+                    continue
+                try:
+                    items = parse_feed(fetch_via_jina(u))
+                    if items:
+                        yield items, u + ' (jina)'
+                except Exception as e2:
+                    errors.append(f'{u} (jina): {type(e2).__name__}: {str(e2)[:100]}')
 
 
 def jina_ok(link):
@@ -241,7 +274,7 @@ def jina_ok(link):
 
 def techmeme_link(raw):
     """Techmeme öğesinin açıklamasındaki ilk dış bağlantı = asıl makale."""
-    for m in re.finditer(r'href=["\']([^"\']+)', raw or ''):
+    for m in re.finditer(r'href=["\']([^"\']+)', raw or '', re.I):
         u = html.unescape(m.group(1))
         if u.startswith('http') and 'techmeme.com' not in u:
             return u
