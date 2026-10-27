@@ -1,0 +1,51 @@
+name: Lens Seçim APK
+
+on:
+  push:
+    branches: [main]
+    paths: ['android/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: İmza parolası var mı
+        env:
+          KS_PASS: ${{ secrets.KS_PASS }}
+        run: |
+          if [ -z "$KS_PASS" ]; then
+            echo "::error::KS_PASS gizli değeri yok. Repo → Settings → Secrets and variables → Actions → New repository secret → Name: KS_PASS"
+            exit 1
+          fi
+
+      - name: APK derle
+        env:
+          KS_FILE: ${{ github.workspace }}/android/lens.jks
+          KS_PASS: ${{ secrets.KS_PASS }}
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: 1.${{ github.run_number }}
+        run: ./android/build.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lens-secim
+          path: android/build/lens-secim.apk
+
+      - name: Release'e yükle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view secim >/dev/null 2>&1 || gh release create secim --title "Lens Seçim (Android)" \
+            --notes "Seçim menüsüne Lens ekleyen yardımcı uygulama. lens-secim.apk dosyasını telefona indirip kur."
+          gh release upload secim android/build/lens-secim.apk --clobber

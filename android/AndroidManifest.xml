@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lens — seçim menüsü yardımcısı.
+     Herhangi bir uygulamada metni seçince menüde "Lens" görünür; seçilen metni telefondaki Lens uygulamasında (PWA) açar. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="io.github.mmahsumektiren.lens">
+
+    <!-- Android 11+: Lens PWA'sını (WebAPK) bulabilmek için web bağlantısı açabilen uygulamaları görmemiz gerekiyor -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <category android:name="android.intent.category.BROWSABLE" />
+            <data android:scheme="https" />
+        </intent>
+    </queries>
+
+    <application
+        android:label="@string/app_name"
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false">
+
+        <!-- Seçim menüsündeki "Lens" -->
+        <activity
+            android:name=".ProcessTextActivity"
+            android:label="@string/menu_label"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <!-- Uygulama simgesine dokununca: kısa bilgi + Lens'i aç -->
+        <activity
+            android:name=".InfoActivity"
+            android:label="@string/app_name"
+            android:exported="true"
+            android:theme="@android:style/Theme.DeviceDefault.Dialog.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

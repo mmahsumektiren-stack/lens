@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Lens Seçim</string>
+    <string name="menu_label">Lens</string>
+    <string name="info_text">Lens artık seçim menüsünde.\n\nHerhangi bir uygulamada İngilizce bir metni seç → açılan menüde (gerekirse ⋮ altında) <b>Lens</b>\'e dokun. Metin Lens\'te açılır.\n\nLens uygulamasının (Chrome\'dan yüklenen) telefonda kurulu olması gerekir.</string>
+    <string name="open_lens">Lens\'i aç</string>
+    <string name="not_found">Lens açılamadı. Chrome\'dan Lens\'i yükleyip tekrar dene.</string>
+</resources>

@@ -69,3 +69,9 @@ Güncelleme yaptığında `sw.js` içindeki `VERSION` değerini artır (`lens-v2
 *The Oxford 3000 by CEFR level* ve *The Oxford 5000 by CEFR level* (© Oxford University Press).
 4.953 kelime: A1 900 · A2 793 · B1 690 · B2 1.296 · C1 1.274. Birden çok seviyede geçen kelimede en düşüğü alındı.
 
+
+## Seçim menüsünde Lens (Android yardımcı uygulaması)
+
+`android/` küçük bir yardımcı uygulama: herhangi bir uygulamada metni seçince menüde **Lens** çıkar (bazı uygulamalarda ⋮ altında),
+seçilen metin telefondaki Lens'te açılır. APK GitHub Actions'ta derlenir ve **Releases → secim** altına `lens-secim.apk` olarak yüklenir.
+İmza anahtarı (`android/lens.jks`) parolayla şifrelidir; parola repo gizli değeri `KS_PASS` olarak durur.
