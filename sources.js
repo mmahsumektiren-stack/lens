@@ -127,3 +127,8 @@ function resolveIntentUrl(u) {
   return 'intent://open?u=' + encodeURIComponent(u) +
     '#Intent;scheme=lensresolve;package=' + secimPkg() + ';S.browser_fallback_url=' + encodeURIComponent(secimRelease()) + ';end';
 }
+// "Telefonla aç": Lens Seçim sayfayı telefonda görünmez bir tarayıcıda açıp yazıyı Lens'e geri verir
+function fetchIntentUrl(u) {
+  return 'intent://open?u=' + encodeURIComponent(u) +
+    '#Intent;scheme=lensfetch;package=' + secimPkg() + ';S.browser_fallback_url=' + encodeURIComponent(secimRelease()) + ';end';
+}

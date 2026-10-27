@@ -45,7 +45,7 @@ final class Config {
 }
 JAVA
 # sayfa sadeleştirici (Readability), PWA ile aynı dosya
-cp ../readability.js build/assets/readability.js
+cp ../readability.js ../page-extract.js build/assets/
 
 "$BT/aapt2" compile --dir "$RES" -o build/res.zip
 "$BT/aapt2" link -o build/base.apk -I "$AJ" --manifest AndroidManifest.xml build/res.zip -A build/assets \

@@ -13,6 +13,7 @@ const SHELL = [
   './reader-extras.js?v=30',
   './discover.js?v=30',
   './readability.js?v=30',
+  './page-extract.js?v=30',
   './oxford.json?v=2',
   './manifest.webmanifest',
   './icon-192.png',
