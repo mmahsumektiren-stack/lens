@@ -18,7 +18,7 @@ echo "platform:    $PLAT"
 rm -rf build && mkdir -p build/gen build/classes build/dex
 
 "$BT/aapt2" compile --dir res -o build/res.zip
-"$BT/aapt2" link -o build/base.apk -I "$AJ" --manifest AndroidManifest.xml -R build/res.zip \
+"$BT/aapt2" link -o build/base.apk -I "$AJ" --manifest AndroidManifest.xml build/res.zip \
   --java build/gen --min-sdk-version 26 --target-sdk-version 34 \
   --version-code "$VERSION_CODE" --version-name "$VERSION_NAME"
 
