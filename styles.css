@@ -335,3 +335,26 @@ body.dragging .r-body .w.sel { background: color-mix(in srgb, var(--easy) 45%, t
 /* kütüphane zorluk */
 .lib-diff { margin-top: 4px; font-size: 13px; }
 .lib-diff .lv { font-size: 11px; padding: 2px 7px; }
+
+/* Keşfet */
+.discover { display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px; }
+.disc-head { display: flex; align-items: baseline; gap: 8px; }
+.disc-head h2, #view-read > h2 { margin: 0; font-size: 18px; color: var(--text); text-transform: none; letter-spacing: 0; font-weight: 700; }
+#view-read > h2 { margin-top: 14px; }
+.disc-head .sub { flex: 1; font-size: 12px; }
+.disc-head .r-btn { color: var(--muted); padding: 4px 8px; }
+.chipbar { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; margin: 0 -16px; padding-left: 16px; padding-right: 16px; }
+.chipbar::-webkit-scrollbar { display: none; }
+.chipbar .chip { flex: none; border-radius: 99px; padding: 7px 13px; font-size: 14px; background: var(--surface-2); color: var(--text); }
+.chipbar .chip.on { background: var(--accent); color: var(--accent-ink); font-weight: 650; }
+.disc { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.disc-item { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); cursor: pointer; }
+.disc-item img { width: 76px; height: 76px; object-fit: cover; border-radius: 10px; flex: none; background: var(--surface-2); order: 2; }
+.disc-txt { flex: 1; min-width: 0; }
+.disc-meta { font-size: 12px; color: var(--muted); margin-bottom: 3px; }
+.disc-meta .via { opacity: .8; }
+.disc-title { font-weight: 650; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.disc-sum { font-size: 14px; color: var(--muted); margin-top: 3px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.disc-item.done .disc-title { color: var(--muted); }
+.srcset { display: flex; flex-direction: column; gap: 10px; }
+.src-group { display: flex; flex-direction: column; gap: 6px; }

@@ -309,7 +309,7 @@ def filter_items(src, items, now):
             summary = ''
         kept.append({
             'src': src['id'], 'cat': src['cat'], 'title': it['title'], 'link': link,
-            'date': d.isoformat() if d else None, 'summary': summary, 'image': it['image'],
+            'date': d.astimezone(timezone.utc).isoformat() if d else None,  # sıralama için hepsi UTC 'summary': summary, 'image': it['image'],
             'site': host.replace('www.', ''), **extra,
         })
         if len(kept) >= src.get('per_source', DEFAULT_PER_SOURCE):

@@ -8,7 +8,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=21">
+  <link rel="stylesheet" href="styles.css?v=23">
 </head>
 <body>
   <header class="top">
@@ -51,6 +51,13 @@
 
     <!-- OKU (kütüphane) -->
     <section id="view-read" class="view" hidden>
+      <section class="discover">
+        <div class="disc-head"><h2>Keşfet</h2><span id="discAge" class="sub"></span><button id="discRefresh" class="r-btn" aria-label="Yenile">↻</button></div>
+        <div id="discTabs" class="chipbar"></div>
+        <ul id="discList" class="disc"></ul>
+        <button id="discMore" class="ghost" hidden>Daha fazla</button>
+      </section>
+      <h2>Kütüphanem</h2>
       <div class="row lib-add">
         <input id="libUrl" type="url" inputmode="url" placeholder="Haber ya da yazı linki yapıştır…">
         <button id="libGo" class="primary">Getir</button>
@@ -102,6 +109,9 @@
       <button id="saveSettings" class="primary">Ayarları kaydet</button>
       <button id="testKey" class="ghost">Anahtarı test et</button>
 
+      <h2>Keşfet kaynakları</h2>
+      <div id="srcSettings" class="srcset"></div>
+
       <h2>Bağlantılar</h2>
       <button id="netTest" class="ghost">Bağlantıları test et</button>
       <div id="netResult" class="netres"></div>
@@ -128,9 +138,10 @@
 
   <div id="toast" class="toast" hidden></div>
 
-  <script src="readability.js?v=21"></script>
-  <script src="reader.js?v=21"></script>
-  <script src="reader-extras.js?v=21"></script>
-  <script src="app.js?v=21"></script>
+  <script src="readability.js?v=23"></script>
+  <script src="reader.js?v=23"></script>
+  <script src="reader-extras.js?v=23"></script>
+  <script src="discover.js?v=23"></script>
+  <script src="app.js?v=23"></script>
 </body>
 </html>

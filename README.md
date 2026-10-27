@@ -78,3 +78,10 @@ Güncelleme yaptığında `sw.js` içindeki `VERSION` değerini artır (`lens-v2
 `android/` küçük bir yardımcı uygulama: herhangi bir uygulamada metni seçince menüde **Lens** çıkar (bazı uygulamalarda ⋮ altında),
 seçilen metin telefondaki Lens'te açılır. APK GitHub Actions'ta derlenir ve **Releases → secim** altına `lens-secim.apk` olarak yüklenir.
 İmza anahtarı (`android/lens.jks`) parolayla şifrelidir; parola repo gizli değeri `KS_PASS` olarak durur.
+
+## Keşfet (Oku sekmesi)
+
+Seçili kaynaklardan en yeni yazılar: Tümü · 🔥 Gündemde (Hacker News, Techmeme) · Teknoloji · Dünya · Magazin · Bloglar · Okuma.
+`tools/feeds.py` GitHub Actions'ta 3 saatte bir çalışır (`.github/workflows/feeds.yml`), akışları toplar, her kaynaktan bir yazıyı
+Jina ile açmayı dener ve sonucu `feed` dalındaki `feed.json`'a yazar. Lens dosyayı raw.githubusercontent.com'dan okur.
+Kaynaklar Ayarlar → Keşfet kaynakları'ndan açılıp kapatılabilir; şu an alınamayanlar orada işaretlidir.

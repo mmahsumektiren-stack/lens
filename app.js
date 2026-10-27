@@ -285,10 +285,10 @@ function show(view) {
   $('#title').textContent = TITLES[view];
   document.body.classList.toggle('reading', view === 'reader');
   if (view !== 'reader' && typeof closeSheet === 'function') { closeSheet(); stopReadAloud(); }
-  if (view === 'read') renderLibrary();
+  if (view === 'read') { renderDiscover(); renderLibrary().then(drawDiscList); }
   if (view === 'review') renderReview();
   if (view === 'list') renderList();
-  if (view === 'settings') renderSettings();
+  if (view === 'settings') { renderSettings(); renderSourceSettings(); }
   if (view === 'add') renderTokens();
 }
 
@@ -898,6 +898,8 @@ function handleLaunchParams() {
 (async function init() {
   bind();
   bindReader();
+  bindDiscover();
+  bindSourceSettings();
   $('#netBadge').hidden = navigator.onLine;
   try {
     await loadCards();
