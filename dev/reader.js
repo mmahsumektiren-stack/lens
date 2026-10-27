@@ -106,39 +106,9 @@ function htmlToArticle(html, url) {
   const base = doc.createElement('base');
   base.href = url;
   doc.head.prepend(base);
-  const meta = (n) => doc.querySelector(`meta[property="${n}"],meta[name="${n}"]`)?.content || '';
-  const art = new Readability(doc).parse();
-  if (!art || !art.content) throw new Error('makale bulunamadı');
-  const box = new DOMParser().parseFromString(art.content, 'text/html').body;
-  return {
-    title: art.title || meta('og:title'),
-    byline: art.byline || '',
-    site: art.siteName || hostOf(url),
-    published: art.publishedTime || meta('article:published_time'),
-    image: absUrl(meta('og:image'), url),
-    blocks: domToBlocks(box, url)
-  };
+  return extractArticle(doc, url); // page-extract.js (Lens Seçim de aynısını kullanır)
 }
-function absUrl(u, base) { try { return u ? new URL(u, base).href : ''; } catch { return ''; } }
-function domToBlocks(root, base) {
-  const out = [];
-  const els = root.querySelectorAll('p,h1,h2,h3,h4,li,blockquote,img,figcaption,pre');
-  for (const el of els) {
-    const tag = el.tagName.toLowerCase();
-    if (tag === 'img') {
-      const src = absUrl(el.getAttribute('src') || el.getAttribute('data-src'), base);
-      if (src && !/^data:/.test(src)) out.push({ t: 'img', src });
-      continue;
-    }
-    if ((tag === 'li' || tag === 'blockquote') && el.querySelector('p')) continue;
-    if (tag === 'p' && el.closest('li,figcaption')) continue;
-    const text = el.textContent.replace(/[ \t\n]+/g, ' ').trim();
-    if (!text) continue;
-    const t = /^h[1-4]$/.test(tag) ? 'h' : tag === 'li' ? 'li' : tag === 'blockquote' ? 'q' : tag === 'figcaption' ? 'cap' : 'p';
-    out.push({ t, text });
-  }
-  return out;
-}
+function absUrl(u, base) { return peAbsUrl(u, base); }
 function markdownToBlocks(md) {
   const out = [];
   const clean = (s) => s
@@ -226,7 +196,7 @@ async function importRedditData(raw, url) {
   }
 }
 
-async function importArticle(url, titleHint = '') {
+async function importArticle(url, titleHint = '', opts = {}) {
   url = normUrl(url);
   await loadArticles();
   const existing = articles.find((a) => a.url === url);
@@ -248,7 +218,9 @@ async function importArticle(url, titleHint = '') {
     }
   }
 
-  for (const [name, fn] of READ_SVCS) {
+  // Lens Seçim'in telefonda açıp çıkardığı yazı varsa önce onu dene (bot korumasına takılmaz)
+  const svcs = opts.page ? [['telefon', async () => opts.page], ...READ_SVCS] : READ_SVCS;
+  for (const [name, fn] of svcs) {
     try {
       const a = await fn(url);
       const blocks = tidyBlocks(a.blocks || [], cleanTitle(a.title || titleHint));
@@ -290,6 +262,7 @@ async function importArticle(url, titleHint = '') {
       <li><b>Paylaş → Lens</b> — yazı okuyucuda açılır</li>
     </ol>
     <div class="row" style="justify-content:center">
+      ${opts.page ? '' : `<a class="primary" href="${esc(fetchIntentUrl(url))}" style="text-decoration:none;padding:11px 16px;border-radius:var(--radius)">Telefonla aç</a>`}
       <a class="ghost" href="${esc(url)}" target="_blank" rel="noopener" style="text-decoration:none;padding:11px 16px">Sayfayı aç ↗</a>
       <button class="ghost" id="rRetry">Tekrar dene</button>
     </div>

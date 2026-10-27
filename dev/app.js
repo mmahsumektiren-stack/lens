@@ -860,12 +860,23 @@ function handleLaunchParams() {
   const text = p.get('text') || '';
   const title = p.get('title') || '';
   const url = p.get('url') || '';
-  // Lens Seçim (Android) Reddit gönderisini telefondan çekip veri olarak gönderdi
-  const reddit = p.get('reddit');
-  if (p.get('rerr')) window.launchErr = p.get('rerr'); // Lens Seçim'in hata nedeni (Teknik ayrıntı'da gösterilir)
+  // Lens Seçim (Android) sayfayı/gönderiyi telefonda açıp veriyi adresin # kısmında gönderir
+  // (# kısmı sunucuya gitmez, uzun yazılar adres sınırına takılmaz)
+  const h = new URLSearchParams(location.hash.slice(1));
+  const reddit = h.get('reddit') || p.get('reddit');
+  const page = h.get('page');
+  const perr = h.get('perr') || p.get('rerr');
+  if (perr) window.launchErr = perr; // Lens Seçim'in hata nedeni (Teknik ayrıntı'da gösterilir)
   if (reddit) {
     history.replaceState(null, '', location.pathname);
     importRedditData(reddit, url);
+    return;
+  }
+  if (page && url) {
+    history.replaceState(null, '', location.pathname);
+    let data = null;
+    try { data = JSON.parse(page); } catch {}
+    importArticle(url, p.get('title') || '', { page: data });
     return;
   }
   const linkInText = (text.match(URL_RE) || [])[0] || '';
