@@ -245,6 +245,19 @@ async function importArticle(url, titleHint = '') {
     }
   }
   store.set('failedImport', { url, title: titleHint, at: now() });
+  if (isRedditShareLink(url)) {
+    host.innerHTML = `<div class="r-loading fail">
+      <p><b>Reddit'in kısa paylaş bağlantısı açılamadı.</b></p>
+      <p>Reddit uygulaması <i>…/s/…</i> şeklinde kısa bağlantı veriyor ve tarayıcı bunu gerçek gönderi adresine çeviremiyor. <b>Lens Seçim</b> uygulaması telefonundan çevirip gönderiyi Lens'te açar.</p>
+      <div class="row" style="justify-content:center">
+        <a class="primary" href="${esc(resolveIntentUrl(url))}" style="text-decoration:none;padding:11px 16px;border-radius:var(--radius)">Reddit bağlantısını çöz</a>
+        <button class="ghost" id="rRetry">Tekrar dene</button>
+      </div>
+      <p class="sub">Düğme işe yaramazsa Lens Seçim'in son sürümünü yükle (açılan sayfadan <i>lens-secim.apk</i>).</p>
+      <details class="sub"><summary>Teknik ayrıntı</summary>${esc(errs.join(' · '))}</details></div>`;
+    $('#rRetry').onclick = () => importArticle(url, titleHint);
+    return;
+  }
   const blocked = errs.some((e) => /metin çok kısa|engel sayfası|HTTP 40[13]|HTTP 451/.test(e));
   host.innerHTML = `<div class="r-loading fail">
     <p><b>Bu sayfa getirilemedi.</b></p>

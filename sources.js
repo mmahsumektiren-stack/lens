@@ -30,11 +30,11 @@ async function redditPostPath(url) {
   if (/\/comments\/[a-z0-9]+/i.test(path)) return path;
   if (/\/s\/[A-Za-z0-9]+$/.test(path)) {
     // uygulamanın paylaş bağlantısı: yönlendirmeyi takip et
-    for (const tryUrl of ['https://www.reddit.com' + path, 'https://old.reddit.com' + path]) {
+    for (const tryUrl of ['https://www.reddit.com' + path + '.json', 'https://www.reddit.com' + path, 'https://old.reddit.com' + path]) {
       try {
         const r = await fetchWithTimeout(tryUrl, { redirect: 'follow' }, 10000);
         const m = new URL(r.url).pathname.match(/\/r\/[^/]+\/comments\/[a-z0-9]+[^?#]*/i);
-        if (m) return m[0].replace(/\/+$/, '');
+        if (m) return m[0].replace(/\/+$/, '').replace(/\.json$/, '');
       } catch {}
     }
     // son çare: Jina engellense bile yönlendirmeyi çözmüş olabilir
@@ -44,7 +44,9 @@ async function redditPostPath(url) {
       const m = String((j.data || j).url || '').match(/\/r\/[^/]+\/comments\/[a-z0-9]+[^?#]*/i);
       if (m) return m[0].replace(/\/+$/, '');
     } catch {}
-    throw new Error('paylaş bağlantısı çözülemedi');
+    const err = new Error('paylaş bağlantısı çözülemedi');
+    err.shareLink = true;
+    throw err;
   }
   throw new Error('gönderi adresi değil');
 }
@@ -106,4 +108,12 @@ function redditToArticle(j, path) {
     blocks,
     url: 'https://www.reddit.com' + path
   };
+}
+
+// Reddit uygulamasının kısa paylaş bağlantısı mı (/r/x/s/…)? Tarayıcı bunları çözemez; Lens Seçim uygulaması çözer.
+const isRedditShareLink = (u) => isReddit(u) && /\/s\/[A-Za-z0-9]+\/?$/.test(new URL(u).pathname);
+const SECIM_RELEASE = 'https://github.com/mmahsumektiren-stack/lens/releases/tag/secim';
+function resolveIntentUrl(u) {
+  return 'intent://open?u=' + encodeURIComponent(u) +
+    '#Intent;scheme=lensresolve;package=io.github.mmahsumektiren.lens;S.browser_fallback_url=' + encodeURIComponent(SECIM_RELEASE) + ';end';
 }

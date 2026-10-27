@@ -4,6 +4,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="io.github.mmahsumektiren.lens">
 
+    <!-- Reddit paylaş bağlantılarını telefondan çözmek için -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <!-- Android 11+: Lens PWA'sını (WebAPK) bulabilmek için web bağlantısı açabilen uygulamaları görmemiz gerekiyor -->
     <queries>
         <intent>
@@ -53,6 +56,22 @@
             android:noHistory="true"
             android:taskAffinity=""
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- Lens'teki "Reddit bağlantısını çöz" düğmesi: kısa paylaş bağlantısını gerçek gönderi adresine çevirir -->
+        <activity
+            android:name=".ResolveActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="lensresolve" />
+            </intent-filter>
+        </activity>
 
         <!-- Uygulama simgesine dokununca: kısa bilgi + Lens'i aç -->
         <activity
