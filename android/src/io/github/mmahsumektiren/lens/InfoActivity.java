@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.Gravity;
+import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -26,9 +27,12 @@ public class InfoActivity extends Activity {
 
         Button open = new Button(this);
         open.setText(R.string.open_lens);
-        open.setOnClickListener(v -> {
-            LensLauncher.open(this, Uri.parse(LensLauncher.BASE));
-            finish();
+        open.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                LensLauncher.open(InfoActivity.this, Uri.parse(LensLauncher.BASE));
+                finish();
+            }
         });
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
