@@ -19,16 +19,21 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 
-UA = 'Mozilla/5.0 (compatible; LensFeedBot/1.0; +https://github.com/mmahsumektiren-stack/lens)'
+UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36'
 
 # kategori: trend (Gündemde), tech, world, ent (Magazin), blogs, read (Okuma)
 SOURCES = [
     # öğrenci dostu
     {'id': 'voa-le', 'name': 'VOA Learning English', 'cat': 'world', 'home': 'https://learningenglish.voanews.com/',
-     'feeds': ['https://learningenglish.voanews.com/api/zmg_pl-vomx-tpeymtm', 'https://learningenglish.voanews.com/api/']},
+     'pick_newest': True,  # onlarca alt akışı var; en güncel yazıları olanı seç
+     'feeds': ['https://learningenglish.voanews.com/api/', 'https://learningenglish.voanews.com/api/zmg_pl-vomx-tpeymtm',
+               'https://learningenglish.voanews.com/api/z-ptqml-vomx-tper-kqy', 'https://learningenglish.voanews.com/api/z-qvqvl-vomx-tperkuqt',
+               'https://learningenglish.voanews.com/api/zt-pq_l-vomx-tpekyyqv', 'https://learningenglish.voanews.com/api/zgptqil-vomx-tpe-jkqm',
+               'https://learningenglish.voanews.com/api/zbptq_l-vomx-tpeq-kqv', 'https://learningenglish.voanews.com/api/z-viqql-vomx-tpero_qq',
+               'https://learningenglish.voanews.com/api/zj-pqrl-vomx-tpebyyqo', 'https://learningenglish.voanews.com/api/zqmiqol-vomx-tpei-mqp']},
     # gündem
     {'id': 'hn', 'name': 'Hacker News', 'cat': 'trend', 'home': 'https://news.ycombinator.com/',
-     'feeds': ['https://hnrss.org/frontpage?points=300&count=40'], 'max_age_days': 4, 'per_source': 25, 'external': True},
+     'feeds': ['https://hnrss.org/frontpage?points=250&count=50'], 'max_age_days': 4, 'per_source': 25, 'external': True},
     {'id': 'techmeme', 'name': 'Techmeme', 'cat': 'trend', 'home': 'https://www.techmeme.com/',
      'feeds': ['https://www.techmeme.com/feed.xml'], 'max_age_days': 3, 'per_source': 15, 'external': True},
     # teknoloji / yapay zeka
@@ -48,27 +53,32 @@ SOURCES = [
     {'id': 'guardian', 'name': 'The Guardian', 'cat': 'world', 'home': 'https://www.theguardian.com/world',
      'feeds': ['https://www.theguardian.com/world/rss']},
     # magazin / eğlence
-    {'id': 'variety', 'name': 'Variety', 'cat': 'ent', 'home': 'https://variety.com/',
-     'feeds': ['https://variety.com/feed/']},
+    {'id': 'polygon', 'name': 'Polygon', 'cat': 'ent', 'home': 'https://www.polygon.com/',
+     'feeds': ['https://www.polygon.com/rss/index.xml']},
+    {'id': 'avclub', 'name': 'The A.V. Club', 'cat': 'ent', 'home': 'https://www.avclub.com/',
+     'feeds': ['https://www.avclub.com/rss']},
+    {'id': 'nme', 'name': 'NME', 'cat': 'ent', 'home': 'https://www.nme.com/',
+     'feeds': ['https://www.nme.com/feed']},
     {'id': 'bbc-ent', 'name': 'BBC Entertainment', 'cat': 'ent', 'home': 'https://www.bbc.com/news/entertainment_and_arts',
      'feeds': ['https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml']},
     # bloglar
     {'id': 'gates', 'name': 'Gates Notes', 'cat': 'blogs', 'home': 'https://www.gatesnotes.com/',
-     'feeds': ['https://www.gatesnotes.com/rss', 'https://www.gatesnotes.com/feed'], 'max_age_days': 180},
+     'feeds': ['https://www.gatesnotes.com/home/rss', 'https://www.gatesnotes.com/rss'], 'max_age_days': 180},
     {'id': 'pg', 'name': 'Paul Graham', 'cat': 'blogs', 'home': 'https://paulgraham.com/',
      'feeds': ['http://www.aaronsw.com/2002/feeds/pgessays.rss'], 'max_age_days': 3650, 'per_source': 5},
     {'id': 'altman', 'name': 'Sam Altman', 'cat': 'blogs', 'home': 'https://blog.samaltman.com/',
      'feeds': ['https://blog.samaltman.com/posts.atom'], 'max_age_days': 365},
     {'id': 'willison', 'name': 'Simon Willison', 'cat': 'blogs', 'home': 'https://simonwillison.net/',
      'feeds': ['https://simonwillison.net/atom/entries/'], 'max_age_days': 30},
-    {'id': 'housel', 'name': 'Morgan Housel', 'cat': 'blogs', 'home': 'https://collabfund.com/blog/',
-     'feeds': ['https://collabfund.com/blog/rss/', 'https://collabfund.com/rss/'], 'max_age_days': 120},
+    {'id': 'housel', 'name': 'Collab Fund (Morgan Housel)', 'cat': 'blogs', 'home': 'https://collabfund.com/blog/',
+     'feeds': ['http://feeds.feedburner.com/collabfund', 'https://collabfund.com/blog/rss/'], 'max_age_days': 120},
     {'id': 'wbw', 'name': 'Wait But Why', 'cat': 'blogs', 'home': 'https://waitbutwhy.com/',
      'feeds': ['https://waitbutwhy.com/feed'], 'max_age_days': 3650, 'per_source': 5},
     {'id': 'openai', 'name': 'OpenAI', 'cat': 'blogs', 'home': 'https://openai.com/news/',
      'feeds': ['https://openai.com/news/rss.xml', 'https://openai.com/blog/rss.xml'], 'max_age_days': 60},
     {'id': 'anthropic', 'name': 'Anthropic', 'cat': 'blogs', 'home': 'https://www.anthropic.com/news',
-     'feeds': ['https://www.anthropic.com/rss.xml', 'https://www.anthropic.com/news/rss.xml'], 'max_age_days': 60},
+     # resmi akış yok; duyuru sayfasından üretilen topluluk akışı (github.com/Olshansk/rss-feeds)
+     'feeds': ['https://raw.githubusercontent.com/Olshansk/rss-feeds/main/feeds/feed_anthropic_news.xml'], 'max_age_days': 60},
     # okuma (haber dışı)
     {'id': 'aeon', 'name': 'Aeon', 'cat': 'read', 'home': 'https://aeon.co/',
      'feeds': ['https://aeon.co/feed.rss'], 'max_age_days': 30},
@@ -193,8 +203,8 @@ def discover(home):
     return out
 
 
-def get_items(src):
-    errors = []
+def feed_candidates(src, errors):
+    """Aday akışları sırayla üretir: (öğeler, adres). Önce bilinen adresler, sonra ana sayfadan keşif."""
     tried = []
     for url in src['feeds'] + ['__discover__']:
         urls = [url]
@@ -210,11 +220,11 @@ def get_items(src):
                 data, _, _ = fetch(u, accept='application/rss+xml, application/atom+xml, application/xml, text/xml;q=0.9, */*;q=0.5')
                 items = parse_feed(data)
                 if items:
-                    return items, u, errors
-                errors.append(f'{u}: boş akış')
+                    yield items, u
+                else:
+                    errors.append(f'{u}: boş akış')
             except Exception as e:
                 errors.append(f'{u}: {type(e).__name__}: {str(e)[:120]}')
-    return [], None, errors
 
 
 def jina_ok(link):
@@ -229,38 +239,68 @@ def jina_ok(link):
         return False, f'{type(e).__name__}: {str(e)[:80]}'
 
 
+def techmeme_link(raw):
+    """Techmeme öğesinin açıklamasındaki ilk dış bağlantı = asıl makale."""
+    for m in re.finditer(r'href=["\']([^"\']+)', raw or ''):
+        u = html.unescape(m.group(1))
+        if u.startswith('http') and 'techmeme.com' not in u:
+            return u
+    return None
+
+
+def filter_items(src, items, now):
+    max_age = src.get('max_age_days', DEFAULT_MAX_AGE)
+    kept = []
+    for it in sorted(items, key=lambda x: x['date'] or datetime.min.replace(tzinfo=timezone.utc), reverse=True):
+        link = it['link']
+        if src['id'] == 'techmeme':
+            link = techmeme_link(it['raw']) or link
+        if not link.startswith('http'):
+            continue
+        host = urllib.parse.urlparse(link).hostname or ''
+        if src.get('external') and any(host == d or host.endswith('.' + d) for d in SKIP_DOMAINS):
+            continue
+        if link.lower().endswith('.pdf'):
+            continue
+        d = it['date']
+        if d and (now - d).days > max_age:
+            continue
+        extra = {}
+        summary = it['summary']
+        if src['id'] == 'hn':
+            m = re.search(r'Points:\s*(\d+)', it['raw'] or '')
+            if m:
+                extra['points'] = int(m.group(1))
+            summary = ''  # hnrss özeti sadece puan/yorum bilgisi
+        if src['id'] == 'techmeme':
+            summary = ''
+        kept.append({
+            'src': src['id'], 'cat': src['cat'], 'title': it['title'], 'link': link,
+            'date': d.isoformat() if d else None, 'summary': summary, 'image': it['image'],
+            'site': host.replace('www.', ''), **extra,
+        })
+        if len(kept) >= src.get('per_source', DEFAULT_PER_SOURCE):
+            break
+    return kept
+
+
 def main():
     now = datetime.now(timezone.utc)
     out_items, report = [], []
     for src in SOURCES:
-        items, used, errors = get_items(src)
-        max_age = src.get('max_age_days', DEFAULT_MAX_AGE)
-        kept = []
-        for it in items:
-            link = it['link']
-            if not link.startswith('http'):
+        errors = []
+        best, used = [], None
+        for items, url in feed_candidates(src, errors):
+            kept = filter_items(src, items, now)
+            if not kept:
+                errors.append(f'{url}: güncel yazı yok')
                 continue
-            host = urllib.parse.urlparse(link).hostname or ''
-            if src.get('external') and any(host == d or host.endswith('.' + d) for d in SKIP_DOMAINS):
-                continue
-            if link.lower().endswith('.pdf'):
-                continue
-            d = it['date']
-            if d and (now - d).days > max_age:
-                continue
-            extra = {}
-            if src['id'] == 'hn':
-                m = re.search(r'Points:\s*(\d+)', it['raw'] or '')
-                if m:
-                    extra['points'] = int(m.group(1))
-                it['summary'] = ''  # hnrss özeti sadece puan/yorum bilgisi
-            kept.append({
-                'src': src['id'], 'cat': src['cat'], 'title': it['title'], 'link': link,
-                'date': d.isoformat() if d else None, 'summary': it['summary'], 'image': it['image'],
-                'site': host.replace('www.', ''), **extra,
-            })
-            if len(kept) >= src.get('per_source', DEFAULT_PER_SOURCE):
+            if not src.get('pick_newest'):
+                best, used = kept, url
                 break
+            if not best or (kept[0]['date'] or '') > (best[0]['date'] or ''):
+                best, used = kept, url
+        kept = best
         jina = None
         if kept:
             # dış bağlantılı gündem kaynaklarında yazılar farklı sitelerden gelir; birini dene yeter
