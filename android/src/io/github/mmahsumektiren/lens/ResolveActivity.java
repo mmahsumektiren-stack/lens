@@ -159,7 +159,7 @@ public class ResolveActivity extends Activity {
         if (!m.find()) { err.append("gönderi kimliği yok"); return null; }
         String id = m.group(1);
         String path = encPath.replaceAll("/+$", "");
-        String q = "?raw_json=1&limit=40&sort=top";
+        String q = "?raw_json=1&limit=40&sort=confidence";
         String[][] tries = {
                 {"https://www.reddit.com/comments/" + id + ".json" + q, "www"},
                 {"https://old.reddit.com/comments/" + id + ".json" + q, "old"},
@@ -169,15 +169,35 @@ public class ResolveActivity extends Activity {
             String body = get(t[0], "application/json", t[1], err);
             if (body == null) continue;
             try {
-                return slim(new JSONArray(body), path).toString();
+                return slim(new JSONArray(body), path).put("via", "json").toString();
             } catch (Exception e) {
                 err.append(t[1]).append(": JSON değil · ");
+            }
+        }
+        // normal web sayfası (puanlar, yanıtlar, "en iyi" sıralaması burada da var)
+        String page = get("https://www.reddit.com" + path + "/", "text/html,application/xhtml+xml", "sayfa", err);
+        if (page != null) {
+            try {
+                RedditHtml.Post p = RedditHtml.parse(page);
+                if (p == null) err.append("sayfa: gönderi bulunamadı · ");
+                else {
+                    if (p.list.isEmpty()) {
+                        String sub = p.sub.isEmpty() ? path.replaceFirst("^/(r/[^/]+)/.*", "$1") : p.sub;
+                        String part = get("https://www.reddit.com/svc/shreddit/comments/" + sub + "/t3_" + id + "?sort=confidence",
+                                "text/html", "yorumlar", err);
+                        if (part != null) RedditHtml.addComments(p, part);
+                    }
+                    return fromPage(p, path).put("via", "page").put("diag", err.toString()).toString();
+                }
+            } catch (Exception e) {
+                err.append("sayfa: ").append(e.getClass().getSimpleName()).append(" · ");
             }
         }
         String rss = get("https://www.reddit.com/comments/" + id + "/.rss?sort=top&limit=40", "application/atom+xml,application/xml", "rss", err);
         if (rss != null) {
             try {
-                return fromRss(rss, path).toString();
+                JSONObject r = fromRss(rss, path);
+                return r.put("via", "rss").put("diag", err.toString()).toString();
             } catch (Exception e) {
                 err.append("rss: okunamadı · ");
             }
@@ -185,10 +205,39 @@ public class ResolveActivity extends Activity {
         return null;
     }
 
+    /** Web sayfasından okunan gönderiyi Lens'in beklediği JSON biçimine çevirir. */
+    private static JSONObject fromPage(RedditHtml.Post p, String path) throws Exception {
+        JSONObject post = new JSONObject().put("title", p.title).put("selftext", cut(p.body, 20000)).put("is_self", true)
+                .put("author", p.author).put("subreddit_name_prefixed", p.sub).put("created_iso", p.created).put("url", "")
+                .put("link_flair_text", p.flair);
+        if (p.score >= 0) post.put("score", p.score);
+        if (p.comments >= 0) post.put("num_comments", p.comments);
+        JSONArray out = new JSONArray();
+        for (int i = 0; i < p.list.size() && out.length() < 15; i++) {
+            RedditHtml.Comment c = p.list.get(i);
+            if (c.depth != 0) continue;
+            JSONObject cd = new JSONObject().put("author", c.author).put("body", cut(c.body, 3000)).put("stickied", false);
+            if (c.hasScore) cd.put("score", c.score);
+            for (int k = i + 1; k < p.list.size() && p.list.get(k).depth > 0; k++) {
+                RedditHtml.Comment r = p.list.get(k);
+                if (r.depth == 1 && (!r.hasScore || r.score > 1)) {
+                    JSONObject rd = new JSONObject().put("author", r.author).put("body", cut(r.body, 2000));
+                    if (r.hasScore) rd.put("score", r.score);
+                    cd.put("replies", listing(new JSONArray().put(new JSONObject().put("kind", "t1").put("data", rd))));
+                    break;
+                }
+            }
+            out.put(new JSONObject().put("kind", "t1").put("data", cd));
+        }
+        return new JSONObject().put("path", path).put("j", new JSONArray()
+                .put(listing(new JSONArray().put(new JSONObject().put("kind", "t3").put("data", post))))
+                .put(listing(out)));
+    }
+
     private static String plain(String html) {
         if (html == null) return "";
         String t = android.text.Html.fromHtml(html, android.text.Html.FROM_HTML_MODE_LEGACY).toString();
-        t = t.replace("\uFFFC", "").replaceAll("\\[link\\]|\\[comments\\]|submitted by\\s+/u/\\S+", "");
+        t = t.replace("\uFFFC", "").replaceAll("\\[link\\]|\\[comments\\]|submitted by\\s+/u/\\S+(\\s+to\\s+r/\\S+)?", "");
         return t.replaceAll("\n{3,}", "\n\n").trim();
     }
 
@@ -209,7 +258,7 @@ public class ResolveActivity extends Activity {
                 if ("title".equals(tag)) title += v;
                 else if ("name".equals(tag)) author += v;
                 else if ("content".equals(tag)) content += v;
-                else if ("updated".equals(tag) || "published".equals(tag)) updated = v;
+                else if ("published".equals(tag) || ("updated".equals(tag) && updated.isEmpty())) updated = v;
             } else if (ev == org.xmlpull.v1.XmlPullParser.END_TAG) {
                 if ("entry".equals(x.getName())) {
                     inEntry = false;
@@ -218,7 +267,7 @@ public class ResolveActivity extends Activity {
                         post = new JSONObject().put("title", title.trim()).put("selftext", cut(plain(content), 20000))
                                 .put("is_self", true).put("author", who)
                                 .put("subreddit_name_prefixed", path.replaceFirst("^/(r/[^/]+)/.*", "$1"))
-                                .put("created_utc", 0).put("url", "");
+                                .put("created_iso", updated.trim()).put("url", "");
                     } else if (out.length() < 15 && !"AutoModerator".equals(who)) {
                         String body = plain(content);
                         if (!body.isEmpty()) out.put(new JSONObject().put("kind", "t1").put("data",
@@ -254,7 +303,10 @@ public class ResolveActivity extends Activity {
                 .put("subreddit", p.optString("subreddit"))
                 .put("subreddit_name_prefixed", p.optString("subreddit_name_prefixed"))
                 .put("created_utc", p.optDouble("created_utc", 0))
-                .put("url", p.optString("url"));
+                .put("url", p.optString("url"))
+                .put("score", p.optInt("score"))
+                .put("num_comments", p.optInt("num_comments"))
+                .put("link_flair_text", p.optString("link_flair_text", ""));
         JSONObject prev = p.optJSONObject("preview");
         if (prev != null && prev.optJSONArray("images") != null && prev.getJSONArray("images").length() > 0) {
             JSONObject src = prev.getJSONArray("images").getJSONObject(0).optJSONObject("source");

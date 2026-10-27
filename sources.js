@@ -94,16 +94,24 @@ function redditToArticle(j, path) {
       // en çok beğenilen ilk yanıt
       const rep = (d.replies?.data?.children || []).find((x) => x.kind === 't1' && x.data?.body && x.data.score > 1);
       if (rep) {
-        blocks.push({ t: 'cap', text: `↳ u/${rep.data.author} · ${rep.data.score} puan` });
+        blocks.push({ t: 'cap', text: `↳ u/${rep.data.author}` + (rep.data.score != null ? ` · ${rep.data.score} puan` : '') });
         blocks.push(...markdownToBlocks(decodeEntities(rep.data.body)).filter((b) => b.t !== 'img').map((b) => ({ ...b, t: b.t === 'p' ? 'q' : b.t })));
       }
     }
   }
+  // üstte gönderinin puanı, yorum sayısı ve etiketi (Reddit'teki gibi)
+  const stats = [
+    p.score != null ? `⬆ ${p.score} puan` : '',
+    p.num_comments != null ? `💬 ${p.num_comments} yorum` : '',
+    p.link_flair_text ? decodeEntities(p.link_flair_text) : ''
+  ].filter(Boolean).join(' · ');
+  if (stats) blocks.unshift({ t: 'cap', text: stats });
+  const iso = String(p.created_iso || '').replace(/\.(\d{3})\d*/, '.$1').replace(/([+-]\d\d)(\d\d)$/, '$1:$2');
   return {
     title: decodeEntities(p.title),
     site: 'reddit.com · ' + sub,
     byline: 'u/' + p.author,
-    published: p.created_utc ? new Date(p.created_utc * 1000).toISOString() : '',
+    published: p.created_utc ? new Date(p.created_utc * 1000).toISOString() : (iso && !isNaN(Date.parse(iso)) ? new Date(iso).toISOString() : ''),
     image: img,
     blocks,
     url: 'https://www.reddit.com' + path

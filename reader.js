@@ -195,17 +195,18 @@ async function saveArticle(a) {
 function normUrl(u) { try { const x = new URL(u); x.hash = ''; ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'fbclid', 'gclid'].forEach((k) => x.searchParams.delete(k)); return x.href; } catch { return u; } }
 
 // Reddit gönderisini (ham JSON: [gönderi, yorumlar]) kütüphaneye kaydedip açar
-async function saveRedditArticle(j, path, url) {
+async function saveRedditArticle(j, path, url, note = '', fresh = false) {
   const a = redditToArticle(j, path);
+  if (note) a.blocks.push({ t: 'cap', text: note });
   const key = 'reddit:' + ((path.match(/\/comments\/([a-z0-9]+)/i) || [])[1] || path);
   await loadArticles();
   const same = articles.find((x) => x.key === key);
-  if (same) return openArticle(same.id); // aynı gönderi başka bir bağlantıyla eklenmiş
+  if (same && !fresh) return openArticle(same.id); // aynı gönderi başka bir bağlantıyla eklenmiş
   const blocks = a.blocks.filter((b) => b.t === 'img' || (b.text && b.text.trim()));
   const words = blocks.filter((b) => b.text).reduce((n, b) => n + b.text.split(/\s+/).length, 0);
   const art = {
-    id: uid(), url: normUrl(url || a.url), key, title: a.title, site: a.site, byline: a.byline, published: a.published, image: a.image,
-    blocks, words, minutes: Math.max(1, Math.round(words / 200)), createdAt: now(), progress: 0, scrollY: 0, trans: {}, via: 'reddit'
+    id: same ? same.id : uid(), url: normUrl(url || a.url), key, title: a.title, site: a.site, byline: a.byline, published: a.published, image: a.image,
+    blocks, words, minutes: Math.max(1, Math.round(words / 200)), createdAt: same ? same.createdAt : now(), progress: 0, scrollY: 0, trans: {}, via: 'reddit'
   };
   await saveArticle(art);
   return openArticle(art.id);
@@ -215,7 +216,10 @@ async function importRedditData(raw, url) {
   try {
     const d = JSON.parse(raw);
     if (!Array.isArray(d.j) || !d.j[0]?.data?.children?.[0]) throw new Error('boş veri');
-    return await saveRedditArticle(d.j, d.path || '', url || ('https://www.reddit.com' + (d.path || '')));
+    // JSON dışındaki yollarda kaynağı ve (teşhis için) nedenini sonda küçük bir notla göster
+    const note = d.via && d.via !== 'json'
+      ? 'Kaynak: ' + (d.via === 'page' ? 'Reddit sayfası' : 'Reddit RSS (puanlar yok)') + (d.diag ? ' · ' + d.diag.replace(/ · $/, '') : '') : '';
+    return await saveRedditArticle(d.j, d.path || '', url || ('https://www.reddit.com' + (d.path || '')), note, true); // Lens Seçim'den gelen taze veri eskisinin yerine geçer
   } catch (e) {
     toast('Reddit verisi okunamadı');
     if (url) return importArticle(url);
