@@ -5,12 +5,12 @@
 const DICTS = [
   { id: 'cambridge', name: 'Cambridge', url: (q) => `https://dictionary.cambridge.org/search/direct/?datasetsearch=english&q=${q}` },
   { id: 'oxford', name: 'Oxford Learner’s', url: (q) => `https://www.oxfordlearnersdictionaries.com/search/english/direct/?q=${q}` },
-  { id: 'longman', name: 'Longman', url: (q) => `https://www.ldoceonline.com/search/english/direct/?q=${q}` },
-  { id: 'mw', name: 'Merriam-Webster', url: (q) => `https://www.merriam-webster.com/dictionary/${q}` },
+  { id: 'youglish', name: 'YouGlish (telaffuz)', url: (q) => `https://youglish.com/pronounce/${q}/english` },
   { id: 'tureng', name: 'Tureng', url: (q) => `https://tureng.com/tr/turkce-ingilizce/${q}` },
   { id: 'cambridge-tr', name: 'Cambridge İng→Tr', url: (q) => `https://dictionary.cambridge.org/search/direct/?datasetsearch=english-turkish&q=${q}` },
-  { id: 'youglish', name: 'YouGlish (telaffuz)', url: (q) => `https://youglish.com/pronounce/${q}/english` },
-  { id: 'urban', name: 'Urban (argo)', url: (q) => `https://www.urbandictionary.com/define.php?term=${q}` }
+  { id: 'longman', name: 'Longman', url: (q) => `https://www.ldoceonline.com/search/english/direct/?q=${q}` },
+  { id: 'mw', name: 'Merriam-Webster', url: (q) => `https://www.merriam-webster.com/dictionary/${q}` },
+  { id: 'collins', name: 'Collins', url: (q) => `https://www.collinsdictionary.com/search/?dictCode=english&q=${q}` }
 ];
 // sözlüğe gönderilecek hali: tek kelimede kök (squeezing → squeeze), kalıpta olduğu gibi
 function dictQuery(term) {
