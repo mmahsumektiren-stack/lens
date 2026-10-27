@@ -41,12 +41,12 @@ Paylaş menüsü ve kurulum için site **HTTPS** üzerinden açılmalı.
 - Chrome'da bir haberi aç → ⋮ → **Paylaş** → **Lens**. Sayfa sade okuyucuda açılır ve **Oku** sekmesine kaydedilir (offline da okunur).
 - Kelimeye dokun → alt panelde anlam, telaffuz, cümle çevirisi. **↔ Kalıp seç** → son kelimeye dokun ("shut down" gibi).
 - **¶ Çevir** paragrafın Türkçesini altına ekler, **¶ Dinle** / 🎧 sesli okur.
-- **Aa**: yazı boyutu, serif/sans, tema (oto/açık/sepya/koyu), Oxford vurgu seviyesi.
+- **Aa**: görünüm (Orijinale yakın / Kitap), yazı boyutu, tema (oto/açık/sepya/koyu), Oxford vurgu seviyesi.
 - Altı çizili = Oxford 3000/5000 listesinde (seçtiğin seviye ve üstü), noktalı = kartlarında var.
-- Sayfa metni Jina Reader (r.jina.ai) ile, olmazsa allorigins + Mozilla Readability ile çekilir; bu servislere sadece sayfanın linki gider.
+- Sayfa metni Jina Reader (r.jina.ai) ile çekilir (Markdown, gerekirse HTML + Mozilla Readability); bu servise sadece sayfanın linki gider.
 - Sayfada kısa bir metni **seçip** paylaşırsan Ekle ekranına gelir; uzun metin (60+ kelime) okuyucuda yazı olarak açılır.
 - **Bot korumalı siteler** (Reuters vb.) uzaktan okunamaz: sayfada uzun bas → **Tümünü seç** → **Paylaş → Lens**. Menü/fotoğraf açıklaması ayıklanır, başlık ve kaynak linki az önce açılamayan sayfadan alınır.
-- **Ayarlar → Bağlantıları test et**: Jina, allorigins, corsproxy ve fxtwitter'a telefondan erişilebiliyor mu gösterir.
+- **Ayarlar → Bağlantıları test et**: Jina ve fxtwitter'a telefondan erişilebiliyor mu gösterir.
 
 ## Dosyalar
 
@@ -69,12 +69,3 @@ Güncelleme yaptığında `sw.js` içindeki `VERSION` değerini artır (`lens-v2
 *The Oxford 3000 by CEFR level* ve *The Oxford 5000 by CEFR level* (© Oxford University Press).
 4.953 kelime: A1 900 · A2 793 · B1 690 · B2 1.296 · C1 1.274. Birden çok seviyede geçen kelimede en düşüğü alındı.
 
-## Kendi vekilin (Cloudflare Worker, isteğe bağlı)
-
-Bazı siteler yazı tiplerini başka sitelere vermez; o zaman satırlar orijinalden kayabilir. `tools/cloudflare-worker.js`
-küçük bir vekil: sadece Lens'in adresinden gelen isteklere yanıt verir, iç ağ adreslerine gitmez, yanıtları 1 gün önbelleğe alır.
-Kurulum: dash.cloudflare.com → Workers & Pages → Create → Worker → Deploy → Edit code → dosyayı yapıştır → Deploy →
-`…workers.dev` adresini Lens → Ayarlar → "Kendi vekil adresin"e yaz → Kaydet → Bağlantıları test et.
-
-**Ev internetin `workers.dev`'i engelliyorsa** (ERR_SSL_PROTOCOL_ERROR, mobil veride açılıyor): `tools/deno-proxy.js`'i
-dash.deno.com → New Playground'a yapıştır → Save & Deploy → `…deno.dev` adresini Lens'e yaz. Aynı vekil, farklı adres.
