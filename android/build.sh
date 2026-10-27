@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Lens Seçim APK'sını Android SDK araçlarıyla doğrudan derler (Gradle yok).
+# Derleme: GitHub Actions (.github/workflows/android.yml)
 # Gerekenler: ANDROID_HOME (build-tools + platforms), JDK 17, KS_FILE / KS_PASS (imza anahtarı).
 set -euo pipefail
 cd "$(dirname "$0")"
