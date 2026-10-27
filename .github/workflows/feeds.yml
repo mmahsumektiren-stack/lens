@@ -1,0 +1,42 @@
+name: Lens Keşfet akışı
+
+on:
+  schedule:
+    - cron: '17 */3 * * *'   # 3 saatte bir
+  push:
+    branches: [main]
+    paths: ['tools/feeds.py', '.github/workflows/feeds.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: feeds
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Kaynakları topla
+        run: python tools/feeds.py "$RUNNER_TEMP/feed.json"
+
+      - name: feed dalına yaz (tek commit, geçmiş birikmez)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/out" && cd "$RUNNER_TEMP/out"
+          git init -q -b feed
+          git config user.name "lens-feed-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          cp "$RUNNER_TEMP/feed.json" feed.json
+          git add feed.json
+          git commit -q -m "feed: $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git" HEAD:feed
