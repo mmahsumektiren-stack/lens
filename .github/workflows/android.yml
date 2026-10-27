@@ -2,8 +2,8 @@ name: Lens Seçim APK
 
 on:
   push:
-    branches: [main]
-    paths: ['android/**', '.github/workflows/android.yml']
+    branches: [main, dev]
+    paths: ['android/**', 'readability.js', '.github/workflows/android.yml']
   workflow_dispatch:
 
 permissions:
@@ -35,6 +35,7 @@ jobs:
           KS_PASS: ${{ secrets.KS_PASS }}
           VERSION_CODE: ${{ github.run_number }}
           VERSION_NAME: 1.${{ github.run_number }}
+          LENS_DEV: ${{ github.ref_name == 'dev' && '1' || '0' }}
         run: |
           set -o pipefail
           if ! ./android/build.sh 2>&1 | tee build.log; then
@@ -44,13 +45,20 @@ jobs:
 
       - uses: actions/upload-artifact@v5
         with:
-          name: lens-secim
-          path: android/build/lens-secim.apk
+          name: lens-secim-${{ github.ref_name }}
+          path: android/build/*.apk
 
       - name: Release'e yükle
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view secim >/dev/null 2>&1 || gh release create secim --title "Lens Seçim (Android)" \
-            --notes "Seçim menüsüne Lens ekleyen yardımcı uygulama. lens-secim.apk dosyasını telefona indirip kur."
-          gh release upload secim android/build/lens-secim.apk --clobber
+          if [ "${{ github.ref_name }}" = "dev" ]; then
+            # test sürümü: asıl indirme bağlantısına dokunmaz
+            gh release view secim-test >/dev/null 2>&1 || gh release create secim-test --prerelease --title "Lens Test Seçim (test sürümü)" \
+              --target dev --notes "Test sürümü. Asıl Lens Seçim'in yanına kurulur, Lens Test'i açar."
+            gh release upload secim-test android/build/lens-secim-test.apk --clobber
+          else
+            gh release view secim >/dev/null 2>&1 || gh release create secim --title "Lens Seçim (Android)" \
+              --notes "Seçim menüsüne Lens ekleyen yardımcı uygulama. lens-secim.apk dosyasını telefona indirip kur."
+            gh release upload secim android/build/lens-secim.apk --clobber
+          fi

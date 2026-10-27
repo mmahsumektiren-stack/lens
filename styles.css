@@ -358,3 +358,11 @@ body.dragging .r-body .w.sel { background: color-mix(in srgb, var(--easy) 45%, t
 .disc-item.done .disc-title { color: var(--muted); }
 .srcset { display: flex; flex-direction: column; gap: 10px; }
 .src-group { display: flex; flex-direction: column; gap: 6px; }
+
+/* test kopyası etiketi */
+html.dev body::after {
+  content: 'TEST'; position: fixed; z-index: 9999; pointer-events: none;
+  top: calc(env(safe-area-inset-top, 0px) + 6px); left: 50%; transform: translateX(-50%);
+  font: 700 10px/1 system-ui, sans-serif; letter-spacing: .12em; color: #fff;
+  background: #c2410c; padding: 4px 8px; border-radius: 999px; opacity: .9;
+}

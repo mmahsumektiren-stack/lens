@@ -12,7 +12,7 @@ import java.util.List;
 
 /** Lens PWA'sını verilen adresle açar: önce Chrome'un kurduğu Lens uygulamasını (WebAPK) arar, yoksa tarayıcıda açar. */
 final class LensLauncher {
-    static final String BASE = "https://mmahsumektiren-stack.github.io/lens/";
+    static final String BASE = Config.BASE; // asıl Lens ya da test kopyası (build.sh belirler)
     static final int MAX_TEXT = 30000;
 
     private LensLauncher() {}
@@ -30,13 +30,16 @@ final class LensLauncher {
         // Chrome'dan "Uygulamayı yükle" ile kurulan PWA'lar org.chromium.webapk.* paketidir
         PackageManager pm = from.getPackageManager();
         List<ResolveInfo> handlers = pm.queryIntentActivities(view, PackageManager.MATCH_ALL);
+        // Lens ve Lens Test ikisi de kuruluysa ikisi de bu adresi açabilir: adına bakarak doğrusunu seç
+        String fallback = null;
         for (ResolveInfo ri : handlers) {
             String pkg = ri.activityInfo != null ? ri.activityInfo.packageName : null;
-            if (pkg != null && pkg.startsWith("org.chromium.webapk")) {
-                view.setPackage(pkg);
-                break;
-            }
+            if (pkg == null || !pkg.startsWith("org.chromium.webapk")) continue;
+            boolean isTest = String.valueOf(ri.loadLabel(pm)).contains("Test");
+            if (isTest == Config.DEV) { fallback = pkg; break; }
+            if (fallback == null) fallback = pkg;
         }
+        if (fallback != null) view.setPackage(fallback);
         try {
             from.startActivity(view);
         } catch (ActivityNotFoundException e) {

@@ -1,0 +1,61 @@
+name: Lens test kopyası
+
+# dev dalındaki her değişiklik, asıl Lens'e dokunmadan https://<kullanıcı>.github.io/lens/dev/ adresine yayımlanır.
+# Asıl Lens yalnızca dev → main birleştirilince ("yükle") değişir.
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: dev-preview
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: dev
+          path: src
+
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+          path: site
+
+      - name: Test kopyasını main/dev/ klasörüne yaz
+        run: |
+          rm -rf site/dev && mkdir -p site/dev
+          rsync -a --exclude '.git' --exclude '.github' --exclude 'android' --exclude 'tools' \
+                --exclude 'dev' --exclude 'README.md' src/ site/dev/
+          python3 - <<'PY'
+          import json
+          p = 'site/dev/manifest.webmanifest'
+          m = json.load(open(p, encoding='utf-8'))
+          m['name'] = 'Lens Test'
+          m['short_name'] = 'Lens Test'
+          m['id'] = './'
+          m['theme_color'] = m['background_color'] = '#3b1d0e'
+          json.dump(m, open(p, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+          PY
+          printf '%s\n' "Bu klasör dev dalından otomatik üretilir (Lens test kopyası). Elle düzenleme." > site/dev/OKU.txt
+
+      - name: main dalına gönder ve sayfayı yeniden oluştur
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd site
+          git config user.name "lens-dev-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A dev
+          if git diff --cached --quiet; then echo "değişiklik yok"; exit 0; fi
+          git commit -q -m "test kopyası: dev@${GITHUB_SHA::7}"
+          for i in 1 2 3; do git pull -q --rebase origin main && git push -q origin HEAD:main && break; sleep 5; done
+          # GITHUB_TOKEN ile yapılan gönderim sayfa derlemesini tetiklemeyebilir: elle iste
+          gh api -X POST "repos/${GITHUB_REPOSITORY}/pages/builds" >/dev/null && echo "sayfa derlemesi istendi" || echo "::warning::sayfa derlemesi istenemedi"

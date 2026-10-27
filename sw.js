@@ -1,15 +1,18 @@
 // Lens Capture service worker — uygulama kabuğunu önbelleğe alır, offline açılış sağlar.
-const VERSION = 'lens-v29';
+// Asıl Lens (/lens/) ve test kopyası (/lens/dev/) aynı sitede: önbellekleri ayrı adlarla tutulur, birbirine dokunmaz.
+const BASE = new URL('./', self.location).pathname;
+const PREFIX = /\/dev\/$/.test(BASE) ? 'lensdev-' : 'lens-';
+const VERSION = PREFIX + 'v30';
 const SHELL = [
   './',
   './index.html',
-  './styles.css?v=29',
-  './app.js?v=29',
-  './reader.js?v=29',
-  './sources.js?v=29',
-  './reader-extras.js?v=29',
-  './discover.js?v=29',
-  './readability.js?v=29',
+  './styles.css?v=30',
+  './app.js?v=30',
+  './reader.js?v=30',
+  './sources.js?v=30',
+  './reader-extras.js?v=30',
+  './discover.js?v=30',
+  './readability.js?v=30',
   './oxford.json?v=2',
   './manifest.webmanifest',
   './icon-192.png',
@@ -24,7 +27,7 @@ self.addEventListener('install', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith(PREFIX) && k !== VERSION).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -34,6 +37,7 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return; // Gemini vb. dış istekler ağdan gider
+  if (PREFIX === 'lens-' && url.pathname.startsWith(BASE + 'dev/')) return; // test kopyası kendi işine baksın
 
   // Sayfa açılışları (paylaşım parametreli olanlar dahil): önce ağ, olmazsa önbellekteki kabuk
   if (req.mode === 'navigate') {

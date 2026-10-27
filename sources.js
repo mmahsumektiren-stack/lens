@@ -120,8 +120,10 @@ function redditToArticle(j, path) {
 
 // Reddit uygulamasının kısa paylaş bağlantısı mı (/r/x/s/…)? Tarayıcı bunları çözemez; Lens Seçim uygulaması çözer.
 const isRedditShareLink = (u) => isReddit(u) && /\/s\/[A-Za-z0-9]+\/?$/.test(new URL(u).pathname);
-const SECIM_RELEASE = 'https://github.com/mmahsumektiren-stack/lens/releases/tag/secim';
+// test kopyası, Lens Seçim'in test sürümüyle (ayrı paket) konuşur
+const secimPkg = () => 'io.github.mmahsumektiren.lens' + (IS_DEV ? '.dev' : '');
+const secimRelease = () => 'https://github.com/mmahsumektiren-stack/lens/releases/tag/' + (IS_DEV ? 'secim-test' : 'secim');
 function resolveIntentUrl(u) {
   return 'intent://open?u=' + encodeURIComponent(u) +
-    '#Intent;scheme=lensresolve;package=io.github.mmahsumektiren.lens;S.browser_fallback_url=' + encodeURIComponent(SECIM_RELEASE) + ';end';
+    '#Intent;scheme=lensresolve;package=' + secimPkg() + ';S.browser_fallback_url=' + encodeURIComponent(secimRelease()) + ';end';
 }

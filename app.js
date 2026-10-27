@@ -17,10 +17,24 @@ function toast(msg, ms = 2200) {
   toast._t = setTimeout(() => (t.hidden = true), ms);
 }
 
+/* ---------- test kopyası (…/lens/dev/) ----------
+   Aynı sitede durduğu için verisi bilerek ayrı tutulur: gerçek kartlara/kütüphaneye dokunmaz.
+   Yalnızca Gemini anahtarı ve modeli, test kopyasında ayarlanmamışsa asıl Lens'ten okunur. */
+const IS_DEV = /\/dev\/(?:index\.html)?$/.test(location.pathname);
+const STORE_PREFIX = IS_DEV ? 'lensdev.' : 'lens.';
+const SHARED_KEYS = ['apiKey', 'model'];
+if (IS_DEV) document.documentElement.classList.add('dev'); // ekranın üstünde küçük TEST etiketi
+
 /* ---------- ayarlar ---------- */
 const store = {
-  get(k, d) { try { const v = localStorage.getItem('lens.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
-  set(k, v) { try { localStorage.setItem('lens.' + k, JSON.stringify(v)); } catch {} }
+  get(k, d) {
+    try {
+      let v = localStorage.getItem(STORE_PREFIX + k);
+      if (v === null && IS_DEV && SHARED_KEYS.includes(k)) v = localStorage.getItem('lens.' + k);
+      return v === null ? d : JSON.parse(v);
+    } catch { return d; }
+  },
+  set(k, v) { try { localStorage.setItem(STORE_PREFIX + k, JSON.stringify(v)); } catch {} }
 };
 const settings = {
   get apiKey() { return store.get('apiKey', ''); },
@@ -35,7 +49,7 @@ const DB = {
   open() {
     if (this._db) return Promise.resolve(this._db);
     return new Promise((res, rej) => {
-      const r = indexedDB.open('lens-capture', 2);
+      const r = indexedDB.open(IS_DEV ? 'lens-capture-dev' : 'lens-capture', 2);
       r.onupgradeneeded = () => {
         const db = r.result;
         if (!db.objectStoreNames.contains('cards')) db.createObjectStore('cards', { keyPath: 'id' });
