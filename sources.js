@@ -89,7 +89,7 @@ function redditToArticle(j, path) {
     blocks.push({ t: 'h', text: 'En iyi yorumlar' });
     for (const c of comments) {
       const d = c.data;
-      blocks.push({ t: 'cap', text: `u/${d.author} · ${d.score} puan` });
+      blocks.push({ t: 'cap', text: `u/${d.author}` + (d.score != null ? ` · ${d.score} puan` : '') });
       blocks.push(...markdownToBlocks(decodeEntities(d.body)).filter((b) => b.t !== 'img'));
       // en çok beğenilen ilk yanıt
       const rep = (d.replies?.data?.children || []).find((x) => x.kind === 't1' && x.data?.body && x.data.score > 1);

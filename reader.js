@@ -232,7 +232,8 @@ async function importArticle(url, titleHint = '') {
   const host = $('#readerBody');
   $('#readerSite').textContent = hostOf(url);
   host.innerHTML = `<div class="r-loading"><div class="spinner"></div><p>Sayfa sadeleştiriliyor…</p><p class="sub">${esc(titleHint || url)}</p></div>`;
-  const errs = [];
+  const errs = window.launchErr ? [window.launchErr] : [];
+  window.launchErr = '';
   // Reddit Jina'yı engelliyor: gönderinin JSON'unu telefondan doğrudan iste
   if (isReddit(url)) {
     try {

@@ -848,6 +848,7 @@ function handleLaunchParams() {
   const url = p.get('url') || '';
   // Lens Seçim (Android) Reddit gönderisini telefondan çekip veri olarak gönderdi
   const reddit = p.get('reddit');
+  if (p.get('rerr')) window.launchErr = p.get('rerr'); // Lens Seçim'in hata nedeni (Teknik ayrıntı'da gösterilir)
   if (reddit) {
     history.replaceState(null, '', location.pathname);
     importRedditData(reddit, url);

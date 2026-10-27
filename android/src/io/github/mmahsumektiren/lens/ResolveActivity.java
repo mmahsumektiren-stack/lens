@@ -53,18 +53,25 @@ public class ResolveActivity extends Activity {
             @Override
             public void run() {
                 String post = null, data = null;
+                StringBuilder err = new StringBuilder();
                 try {
                     post = resolve(url);
-                    if (post != null) data = fetchPost(post);
-                } catch (Exception ignored) {}
-                final String fPost = post, fData = data;
+                    if (post == null) err.append("kısa bağlantı çözülemedi");
+                    else data = fetchPost(post, err);
+                } catch (Exception e) {
+                    err.append(e.getClass().getSimpleName()).append(": ").append(e.getMessage());
+                }
+                final String fPost = post, fData = data, fErr = err.toString();
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
                         Uri.Builder b = Uri.parse(LensLauncher.BASE).buildUpon()
                                 .appendQueryParameter("url", fPost != null ? fPost : url);
                         if (fData != null) b.appendQueryParameter("reddit", fData);
-                        else Toast.makeText(ResolveActivity.this, R.string.resolve_failed, Toast.LENGTH_LONG).show();
+                        else {
+                            b.appendQueryParameter("rerr", "Lens Seçim: " + fErr);
+                            Toast.makeText(ResolveActivity.this, R.string.resolve_failed, Toast.LENGTH_LONG).show();
+                        }
                         LensLauncher.open(ResolveActivity.this, b.build());
                         finish();
                     }
@@ -88,8 +95,9 @@ public class ResolveActivity extends Activity {
     static String resolve(String url) {
         String cur = url;
         for (int i = 0; i < 6; i++) {
-            Matcher m = POST.matcher(Uri.parse(cur).getPath() == null ? "" : Uri.parse(cur).getPath());
-            if (m.find() && Uri.parse(cur).getHost() != null && Uri.parse(cur).getHost().endsWith("reddit.com")) {
+            Uri cu = Uri.parse(cur);
+            Matcher m = POST.matcher(cu.getEncodedPath() == null ? "" : cu.getEncodedPath());
+            if (m.find() && cu.getHost() != null && cu.getHost().endsWith("reddit.com")) {
                 return "https://www.reddit.com" + m.group().replaceAll("/+$", "");
             }
             HttpURLConnection c = null;
@@ -120,30 +128,111 @@ public class ResolveActivity extends Activity {
         return bo.toString("UTF-8");
     }
 
-    /** Gönderinin JSON'unu alır, Lens'in kullandığı alanlara indirger: {"path":…, "j":[gönderi, yorumlar]} */
-    static String fetchPost(String postUrl) throws Exception {
-        String path = Uri.parse(postUrl).getPath();
-        String[] bases = {"https://www.reddit.com", "https://old.reddit.com"};
-        for (String base : bases) {
-            String u = base + path + ".json?raw_json=1&limit=40&sort=top";
-            for (int hop = 0; hop < 3; hop++) {
-                HttpURLConnection c = null;
-                try {
-                    c = open(u, "application/json");
-                    int code = c.getResponseCode();
-                    String loc = c.getHeaderField("Location");
-                    if (code >= 300 && code < 400 && loc != null) { u = new URL(new URL(u), loc).toString(); continue; }
-                    if (code != 200) break;
-                    JSONArray raw = new JSONArray(read(c.getInputStream()));
-                    return slim(raw, path).toString();
-                } catch (Exception e) {
-                    break;
-                } finally {
-                    if (c != null) c.disconnect();
-                }
+    private static final Pattern ID = Pattern.compile("/comments/([a-z0-9]+)", Pattern.CASE_INSENSITIVE);
+
+    /** İstek atar (yönlendirmeleri takip eder); 200 değilse hata nedenini err'e yazar. */
+    private static String get(String u, String accept, String label, StringBuilder err) {
+        for (int hop = 0; hop < 4; hop++) {
+            HttpURLConnection c = null;
+            try {
+                c = open(u, accept);
+                int code = c.getResponseCode();
+                String loc = c.getHeaderField("Location");
+                if (code >= 300 && code < 400 && loc != null) { u = new URL(new URL(u), loc).toString(); continue; }
+                if (code != 200) { err.append(label).append(": HTTP ").append(code).append(" · "); return null; }
+                return read(c.getInputStream());
+            } catch (Exception e) {
+                err.append(label).append(": ").append(e.getClass().getSimpleName()).append(" · ");
+                return null;
+            } finally {
+                if (c != null) c.disconnect();
+            }
+        }
+        err.append(label).append(": çok fazla yönlendirme · ");
+        return null;
+    }
+
+    /** Gönderiyi alır, Lens'in kullandığı alanlara indirger: {"path":…, "j":[gönderi, yorumlar]}. Önce JSON, olmazsa RSS. */
+    static String fetchPost(String postUrl, StringBuilder err) {
+        String encPath = Uri.parse(postUrl).getEncodedPath();
+        Matcher m = ID.matcher(encPath == null ? "" : encPath);
+        if (!m.find()) { err.append("gönderi kimliği yok"); return null; }
+        String id = m.group(1);
+        String path = encPath.replaceAll("/+$", "");
+        String q = "?raw_json=1&limit=40&sort=top";
+        String[][] tries = {
+                {"https://www.reddit.com/comments/" + id + ".json" + q, "www"},
+                {"https://old.reddit.com/comments/" + id + ".json" + q, "old"},
+                {"https://api.reddit.com/comments/" + id + q, "api"}
+        };
+        for (String[] t : tries) {
+            String body = get(t[0], "application/json", t[1], err);
+            if (body == null) continue;
+            try {
+                return slim(new JSONArray(body), path).toString();
+            } catch (Exception e) {
+                err.append(t[1]).append(": JSON değil · ");
+            }
+        }
+        String rss = get("https://www.reddit.com/comments/" + id + "/.rss?sort=top&limit=40", "application/atom+xml,application/xml", "rss", err);
+        if (rss != null) {
+            try {
+                return fromRss(rss, path).toString();
+            } catch (Exception e) {
+                err.append("rss: okunamadı · ");
             }
         }
         return null;
+    }
+
+    private static String plain(String html) {
+        if (html == null) return "";
+        String t = android.text.Html.fromHtml(html, android.text.Html.FROM_HTML_MODE_LEGACY).toString();
+        t = t.replace("\uFFFC", "").replaceAll("\\[link\\]|\\[comments\\]|submitted by\\s+/u/\\S+", "");
+        return t.replaceAll("\n{3,}", "\n\n").trim();
+    }
+
+    /** RSS (Atom) yedeği: ilk kayıt gönderi, sonrakiler yorumlar (puan bilgisi yok). */
+    private static JSONObject fromRss(String xml, String path) throws Exception {
+        org.xmlpull.v1.XmlPullParser x = android.util.Xml.newPullParser();
+        x.setInput(new java.io.StringReader(xml));
+        JSONObject post = null;
+        JSONArray out = new JSONArray();
+        String tag = null, title = "", author = "", content = "", updated = "";
+        boolean inEntry = false;
+        for (int ev = x.getEventType(); ev != org.xmlpull.v1.XmlPullParser.END_DOCUMENT; ev = x.next()) {
+            if (ev == org.xmlpull.v1.XmlPullParser.START_TAG) {
+                tag = x.getName();
+                if ("entry".equals(tag)) { inEntry = true; title = ""; author = ""; content = ""; updated = ""; }
+            } else if (ev == org.xmlpull.v1.XmlPullParser.TEXT && inEntry && tag != null) {
+                String v = x.getText();
+                if ("title".equals(tag)) title += v;
+                else if ("name".equals(tag)) author += v;
+                else if ("content".equals(tag)) content += v;
+                else if ("updated".equals(tag) || "published".equals(tag)) updated = v;
+            } else if (ev == org.xmlpull.v1.XmlPullParser.END_TAG) {
+                if ("entry".equals(x.getName())) {
+                    inEntry = false;
+                    String who = author.trim().replaceFirst("^/?u/", "");
+                    if (post == null) {
+                        post = new JSONObject().put("title", title.trim()).put("selftext", cut(plain(content), 20000))
+                                .put("is_self", true).put("author", who)
+                                .put("subreddit_name_prefixed", path.replaceFirst("^/(r/[^/]+)/.*", "$1"))
+                                .put("created_utc", 0).put("url", "");
+                    } else if (out.length() < 15 && !"AutoModerator".equals(who)) {
+                        String body = plain(content);
+                        if (!body.isEmpty()) out.put(new JSONObject().put("kind", "t1").put("data",
+                                new JSONObject().put("author", who).put("body", cut(body, 3000)).put("stickied", false)));
+                    }
+                }
+                tag = null;
+            }
+        }
+        if (post == null) throw new Exception("boş");
+        JSONArray j = new JSONArray()
+                .put(listing(new JSONArray().put(new JSONObject().put("kind", "t3").put("data", post))))
+                .put(listing(out));
+        return new JSONObject().put("path", path).put("j", j);
     }
 
     private static String cut(String s, int max) {
