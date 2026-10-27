@@ -9,6 +9,7 @@
     <string name="tile_added">Lens kutucuğu eklendi. Kopyala → paneli aşağı çek → Lens.</string>
     <string name="tile_manual">Paneli aşağı çek → düzenle (kalem) → Lens kutucuğunu sürükle.</string>
     <string name="not_found">Lens açılamadı. Chrome\'dan Lens\'i yükleyip tekrar dene.</string>
-    <string name="resolving">Reddit bağlantısı çözülüyor…</string>
-    <string name="resolve_failed">Reddit bağlantısı çözülemedi.</string>
+    <string name="share_label">Lens Reddit</string>
+    <string name="resolving">Reddit gönderisi alınıyor…</string>
+    <string name="resolve_failed">Reddit gönderisi alınamadı.</string>
 </resources>

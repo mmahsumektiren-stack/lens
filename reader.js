@@ -194,6 +194,34 @@ async function saveArticle(a) {
 }
 function normUrl(u) { try { const x = new URL(u); x.hash = ''; ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'fbclid', 'gclid'].forEach((k) => x.searchParams.delete(k)); return x.href; } catch { return u; } }
 
+// Reddit gönderisini (ham JSON: [gönderi, yorumlar]) kütüphaneye kaydedip açar
+async function saveRedditArticle(j, path, url) {
+  const a = redditToArticle(j, path);
+  const key = 'reddit:' + ((path.match(/\/comments\/([a-z0-9]+)/i) || [])[1] || path);
+  await loadArticles();
+  const same = articles.find((x) => x.key === key);
+  if (same) return openArticle(same.id); // aynı gönderi başka bir bağlantıyla eklenmiş
+  const blocks = a.blocks.filter((b) => b.t === 'img' || (b.text && b.text.trim()));
+  const words = blocks.filter((b) => b.text).reduce((n, b) => n + b.text.split(/\s+/).length, 0);
+  const art = {
+    id: uid(), url: normUrl(url || a.url), key, title: a.title, site: a.site, byline: a.byline, published: a.published, image: a.image,
+    blocks, words, minutes: Math.max(1, Math.round(words / 200)), createdAt: now(), progress: 0, scrollY: 0, trans: {}, via: 'reddit'
+  };
+  await saveArticle(art);
+  return openArticle(art.id);
+}
+// Lens Seçim uygulamasının telefondan çekip gönderdiği Reddit verisi (?reddit=…)
+async function importRedditData(raw, url) {
+  try {
+    const d = JSON.parse(raw);
+    if (!Array.isArray(d.j) || !d.j[0]?.data?.children?.[0]) throw new Error('boş veri');
+    return await saveRedditArticle(d.j, d.path || '', url || ('https://www.reddit.com' + (d.path || '')));
+  } catch (e) {
+    toast('Reddit verisi okunamadı');
+    if (url) return importArticle(url);
+  }
+}
+
 async function importArticle(url, titleHint = '') {
   url = normUrl(url);
   await loadArticles();
@@ -209,18 +237,7 @@ async function importArticle(url, titleHint = '') {
   if (isReddit(url)) {
     try {
       const { j, path } = await fetchReddit(url);
-      const a = redditToArticle(j, path);
-      const key = 'reddit:' + ((path.match(/\/comments\/([a-z0-9]+)/i) || [])[1] || path);
-      const same = articles.find((x) => x.key === key);
-      if (same) return openArticle(same.id); // aynı gönderi başka bir bağlantıyla eklenmiş
-      const blocks = a.blocks.filter((b) => b.t === 'img' || (b.text && b.text.trim()));
-      const words = blocks.filter((b) => b.text).reduce((n, b) => n + b.text.split(/\s+/).length, 0);
-      const art = {
-        id: uid(), url, key, title: a.title, site: a.site, byline: a.byline, published: a.published, image: a.image,
-        blocks, words, minutes: Math.max(1, Math.round(words / 200)), createdAt: now(), progress: 0, scrollY: 0, trans: {}, via: 'reddit'
-      };
-      await saveArticle(art);
-      return openArticle(art.id);
+      return await saveRedditArticle(j, path, url);
     } catch (e) {
       errs.push('reddit: ' + (e.message || 'erişilemedi'));
     }
@@ -245,15 +262,15 @@ async function importArticle(url, titleHint = '') {
     }
   }
   store.set('failedImport', { url, title: titleHint, at: now() });
-  if (isRedditShareLink(url)) {
+  if (isReddit(url)) {
     host.innerHTML = `<div class="r-loading fail">
-      <p><b>Reddit'in kısa paylaş bağlantısı açılamadı.</b></p>
-      <p>Reddit uygulaması <i>…/s/…</i> şeklinde kısa bağlantı veriyor ve tarayıcı bunu gerçek gönderi adresine çeviremiyor. <b>Lens Seçim</b> uygulaması telefonundan çevirip gönderiyi Lens'te açar.</p>
+      <p><b>Reddit gönderisi buradan açılamadı.</b></p>
+      <p>Reddit, Lens gibi web uygulamalarının gönderiyi okumasına izin vermiyor. <b>Lens Seçim</b> uygulaması gönderiyi telefonundan alıp burada açar.</p>
       <div class="row" style="justify-content:center">
-        <a class="primary" href="${esc(resolveIntentUrl(url))}" style="text-decoration:none;padding:11px 16px;border-radius:var(--radius)">Reddit bağlantısını çöz</a>
+        <a class="primary" href="${esc(resolveIntentUrl(url))}" style="text-decoration:none;padding:11px 16px;border-radius:var(--radius)">Lens Seçim ile aç</a>
         <button class="ghost" id="rRetry">Tekrar dene</button>
       </div>
-      <p class="sub">Düğme işe yaramazsa Lens Seçim'in son sürümünü yükle (açılan sayfadan <i>lens-secim.apk</i>).</p>
+      <p class="sub">İpucu: Reddit'te <b>Paylaş → Lens Reddit</b> seçersen bu adım hiç çıkmaz. Düğme işe yaramazsa Lens Seçim'in son sürümünü yükle.</p>
       <details class="sub"><summary>Teknik ayrıntı</summary>${esc(errs.join(' · '))}</details></div>`;
     $('#rRetry').onclick = () => importArticle(url, titleHint);
     return;

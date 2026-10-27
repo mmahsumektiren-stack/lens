@@ -846,6 +846,13 @@ function handleLaunchParams() {
   const text = p.get('text') || '';
   const title = p.get('title') || '';
   const url = p.get('url') || '';
+  // Lens Seçim (Android) Reddit gönderisini telefondan çekip veri olarak gönderdi
+  const reddit = p.get('reddit');
+  if (reddit) {
+    history.replaceState(null, '', location.pathname);
+    importRedditData(reddit, url);
+    return;
+  }
   const linkInText = (text.match(URL_RE) || [])[0] || '';
   if (text || title || url) store.set('lastShare', { text, title, url, at: new Date().toISOString() });
   const source = url || linkInText;
