@@ -449,3 +449,5 @@ html.dev body::after {
   font: 700 10px/1 system-ui, sans-serif; letter-spacing: .12em; color: #fff;
   background: #c2410c; padding: 4px 8px; border-radius: var(--r-pill); opacity: .9;
 }
+.dict-box { margin: var(--s3) 0; }
+.act.on { box-shadow: 0 0 0 2px var(--accent) inset; }
