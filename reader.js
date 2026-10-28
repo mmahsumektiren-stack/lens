@@ -157,7 +157,10 @@ function tidyBlocks(blocks, title) {
 
 let articles = [];
 async function loadArticles() { try { articles = (await DB.all('articles')) || []; } catch { articles = []; } }
+// Tweet'ler okuyucuda açılır ama Kütüphanem'e kaydedilmez (geçici yazı)
+const tempArticles = new Map();
 async function saveArticle(a) {
+  if (a.ephemeral) { tempArticles.set(a.id, a); return; }
   await DB.put(a, 'articles');
   const i = articles.findIndex((x) => x.id === a.id);
   if (i >= 0) articles[i] = a; else articles.push(a);
@@ -270,6 +273,39 @@ async function importArticle(url, titleHint = '', opts = {}) {
     details: errs.join(' · ')
   })}</div>`;
   $('#rRetry').onclick = () => importArticle(url, titleHint);
+}
+
+/* ---------- tweet'i okuyucuda aç (Kütüphanem'e kaydedilmez) ---------- */
+async function openTweet(url, id) {
+  await loadOxford();
+  show('reader');
+  $('#readerSite').textContent = 'x.com';
+  const host = $('#readerBody');
+  host.innerHTML = `<div class="r-loading"><div class="spinner"></div><p>Tweet getiriliyor…</p></div>`;
+  const { tweet, errs } = await getTweetText(url, id);
+  if (!tweet) {
+    host.innerHTML = `<div class="r-loading">${failHTML({
+      title: 'Tweet metni alınamadı',
+      text: 'Tweet’i X’te açıp metni kopyalayabilir, sonra Ekle’ye yapıştırabilirsin.',
+      secondary: [{ label: 'Tekrar dene', ico: 'refresh', id: 'rRetry' }, { label: 'Ekle’de aç', ico: 'plus', id: 'rToAdd' }],
+      details: errs.join(' · ')
+    })}</div>`;
+    $('#rRetry').onclick = () => openTweet(url, id);
+    $('#rToAdd').onclick = () => { addState.source = url; $('#sourceLine').hidden = false; $('#sourceLine').textContent = 'Kaynak: ' + url; show('add'); loadTweetText(url, id); };
+    return;
+  }
+  const paras = tweet.text.split(/\n{2,}/).map((x) => x.trim()).filter(Boolean);
+  const art = {
+    id: 'tweet:' + id, ephemeral: true, url: tweet.url || url, tweet,
+    title: (tweet.name || '@' + (tweet.handle || 'x')) + ': ' + tweet.text.replace(/\s+/g, ' ').slice(0, 80),
+    site: 'x.com' + (tweet.handle ? ' · @' + tweet.handle : ''), byline: '', published: '', image: '',
+    blocks: paras.map((text) => ({ t: 'p', text })), words: wordCount(tweet.text), minutes: 1,
+    createdAt: now(), progress: 0, scrollY: 0, trans: {}
+  };
+  const prev = tempArticles.get(art.id);
+  if (prev) Object.assign(art, { trans: prev.trans, showTr: prev.showTr, looked: prev.looked });
+  await saveArticle(art);
+  return openArticle(art.id);
 }
 
 /* ---------- paylaşılan uzun metinden yazı (bot korumalı siteler için: Tümünü seç → Paylaş) ---------- */
@@ -385,7 +421,7 @@ function applyReadPrefs() {
 async function openArticle(id) {
   await loadOxford();
   if (!articles.length) await loadArticles();
-  const a = articles.find((x) => x.id === id);
+  const a = articles.find((x) => x.id === id) || tempArticles.get(id);
   if (!a) return show('read');
   rd.art = a;
   rd.sel = null;
@@ -420,6 +456,17 @@ function renderArticle() {
     const tr = a.trans?.[b] && a.showTr?.[b] ? `<div class="r-tr" data-trof="${b}"><span class="r-tr-l">Türkçe</span>${esc(a.trans[b])}</div>` : '';
     return `<${tag} class="rb rb-${bl.t}" data-block="${b}">${textHTML(bl.text, b)}</${tag}>${tr}`;
   });
+  if (a.tweet) { // tweet: X'teki görünümüyle, kelimelere dokunulabilir
+    const body = a.blocks.map((bl, b) => {
+      const tr = a.trans?.[b] && a.showTr?.[b] ? `<div class="r-tr" data-trof="${b}"><span class="r-tr-l">Türkçe</span>${esc(a.trans[b])}</div>` : '';
+      return `<span class="rb" data-block="${b}">${textHTML(bl.text, b)}</span>${tr}`;
+    }).join('\n\n');
+    $('#readerBody').innerHTML = `<div class="r-tweet">${tweetHTML(a.tweet, body)}</div>
+      <p class="sub r-tw-hint">Bir kelimeye dokun: anlamı, telaffuzu ve sözlükler açılır.</p>
+      <section class="r-sum" id="rSum">${endSummaryHTML(a)}</section>`;
+    if (rd.sel) markSelection();
+    return;
+  }
   $('#readerBody').innerHTML = `
     <header class="r-head">
       <div class="r-meta">${esc(a.site)}${date ? ' · ' + esc(date) : ''} · ${a.minutes} dk</div>
@@ -558,8 +605,8 @@ async function addSelectionToCards() {
   } else {
     const ai = rd.cache.get(term.toLowerCase() + '|' + sentence) || null;
     await saveCard({
-      id: uid(), term, context: sentence, source: a.url, tweet: null,
-      article: { id: a.id, title: a.title, site: a.site },
+      id: uid(), term, context: sentence, source: a.url, tweet: a.tweet || null,
+      article: a.tweet ? null : { id: a.id, title: a.title, site: a.site },
       createdAt: now(), status: ai ? 'ready' : 'pending', ai, error: null, seen: 1, srs: SRS.fresh()
     });
     toast('Kartlara eklendi');
