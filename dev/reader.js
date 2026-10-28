@@ -36,7 +36,7 @@ function lemmaCandidates(w) {
   if (w.endsWith('ing')) { add(w.slice(0, -3)); add(w.slice(0, -3) + 'e'); if (/(.)\1ing$/.test(w)) add(w.slice(0, -4)); }
   if (w.endsWith('er')) { add(w.slice(0, -2)); add(w.slice(0, -1)); }
   if (w.endsWith('est')) { add(w.slice(0, -3)); add(w.slice(0, -2)); }
-  if (w.endsWith('ly')) { add(w.slice(0, -2)); if (w.endsWith('ily')) add(w.slice(0, -3) + 'y'); }
+  // -ly zarfları kökle eşleştirilmez (stably → stab yanlış çıkıyordu); Oxford da zarfları kendi başlığıyla listeler
   return c;
 }
 function oxLookup(w) {
