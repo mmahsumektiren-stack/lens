@@ -23,7 +23,9 @@ async function loadFeed(force = false) {
     const data = await r.json();
     disc.data = data;
     store.set('feedCache', { at: now(), data });
+    logSvc('feed', true);
   } catch (e) {
+    logSvc('feed', false, e.message || 'erişilemedi');
     if (!disc.data) throw e;
   } finally {
     disc.loading = false;

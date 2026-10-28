@@ -43,6 +43,46 @@ const settings = {
   get autoSpeak() { return store.get('autoSpeak', false); }
 };
 
+/* ---------- servis kaydı ----------
+   Dış servislerin (Jina, tweet, Reddit, Gemini…) son 7 gündeki başarı/hata durumu.
+   Ayarlar → Bağlantılar'da görünür: bir şey bozulunca ekran görüntüsü beklemeden neyin bozulduğu belli olur. */
+const SVC_NAMES = {
+  telefon: 'Telefonda açma (Lens Seçim)', jina: 'Jina (sayfa metni)', 'jina-html': 'Jina (sayfa HTML)',
+  reddit: 'Reddit (doğrudan)', 'reddit-telefon': 'Reddit (Lens Seçim)', fxtwitter: 'fxtwitter (tweet)', vxtwitter: 'vxtwitter (tweet)',
+  oembed: 'X oEmbed (tweet)', gemini: 'Gemini (AI)', mymemory: 'MyMemory (temel çeviri)', dictionary: 'Free Dictionary (temel tanım)',
+  feed: 'Keşfet akışı'
+};
+function logSvc(name, ok, msg = '') {
+  try {
+    const log = store.get('svcLog', {});
+    const e = log[name] || { ok: 0, fails: [] };
+    const t = now();
+    if (ok) e.ok = t;
+    else e.fails.push({ at: t, msg: String(msg).slice(0, 120) });
+    e.fails = e.fails.filter((f) => t - f.at < 7 * DAY).slice(-20);
+    log[name] = e;
+    store.set('svcLog', log);
+  } catch {}
+}
+function svcLogHTML() {
+  const log = store.get('svcLog', {});
+  const t = now();
+  const rows = Object.entries(log)
+    .map(([k, e]) => ({ k, e, fails: e.fails.filter((f) => t - f.at < 7 * DAY) }))
+    .filter((r) => r.e.ok > t - 7 * DAY || r.fails.length)
+    .map((r) => ({ ...r, broken: r.fails.length && r.fails[r.fails.length - 1].at > (r.e.ok || 0) ? 1 : 0 }))
+    .sort((a, b) => b.broken - a.broken || b.fails.length - a.fails.length);
+  if (!rows.length) return '<div class="sub">Son 7 günde kayıt yok.</div>';
+  const ago = (x) => { const m = Math.round((t - x) / 60000); return m < 60 ? m + ' dk' : m < 1440 ? Math.round(m / 60) + ' sa' : Math.round(m / 1440) + ' gün'; };
+  return rows.map(({ k, e, fails }) => {
+    const last = fails[fails.length - 1];
+    const lastFailNewer = last && last.at > (e.ok || 0);
+    const icon = !fails.length ? '✅' : lastFailNewer ? '❌' : '⚠️';
+    return `<div>${icon} ${esc(SVC_NAMES[k] || k)} <span class="sub">${e.ok ? 'son başarı ' + ago(e.ok) + ' önce' : 'hiç başarılı olmadı'}${fails.length ? ` · ${fails.length} hata` : ''}</span>
+      ${last ? `<div class="sub svc-err">son hata ${ago(last.at)} önce: ${esc(last.msg)}</div>` : ''}</div>`;
+  }).join('');
+}
+
 /* ---------- IndexedDB ---------- */
 const DB = {
   _db: null,
@@ -170,10 +210,12 @@ async function geminiJSON(prompt, temperature = 0.3) {
       const data = await res.json();
       const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
       store.set('lastModel', model);
+      logSvc('gemini', true);
       return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ''));
     }
     let err = {};
     try { err = (await res.json()).error || {}; } catch {}
+    logSvc('gemini', false, model + ': ' + (res.status === 429 ? 'kota doldu' : 'HTTP ' + res.status + ' ' + (err.message || '')));
     if (res.status === 429) {
       blocked[model] = now() + parseRetryMs(err);
       soonest = Math.min(soonest, blocked[model]);
@@ -223,28 +265,108 @@ async function askGemini(term, context) {
   return json;
 }
 
-let enriching = false;
+/* ---------- Gemini kotası dolunca: temel kart ----------
+   Türkçe anlam MyMemory'den (ücretsiz çeviri), İngilizce tanım/telaffuz/tür Free Dictionary'den.
+   Kart hemen tekrar edilebilir; kota açılınca kendiliğinden tam AI kartına yükseltilir (ai.basic). */
+const POS_TR = { noun: 'isim', verb: 'fiil', adjective: 'sıfat', adverb: 'zarf', pronoun: 'zamir', preposition: 'edat', conjunction: 'bağlaç', interjection: 'ünlem' };
+async function freeTranslate(text) {
+  const r = await fetchWithTimeout('https://api.mymemory.translated.net/get?langpair=en|tr&q=' + encodeURIComponent(text.slice(0, 450)), {}, 10000);
+  if (!r.ok) { logSvc('mymemory', false, 'HTTP ' + r.status); throw new Error('çeviri HTTP ' + r.status); }
+  const j = await r.json();
+  const t = String(j.responseData?.translatedText || '').trim();
+  if (!t || j.responseStatus !== 200 || /MYMEMORY WARNING|INVALID|QUERY LENGTH/i.test(t)) { logSvc('mymemory', false, t.slice(0, 80) || 'boş'); throw new Error('çeviri kotası/hata'); }
+  logSvc('mymemory', true);
+  return t;
+}
+async function freeDefine(word) {
+  const r = await fetchWithTimeout('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(word), {}, 10000);
+  if (!r.ok) { if (r.status !== 404) logSvc('dictionary', false, 'HTTP ' + r.status); return null; } // 404 = sözlükte yok, hata değil
+  logSvc('dictionary', true);
+  const e = (await r.json())[0];
+  if (!e) return null;
+  const m = e.meanings?.[0];
+  const d = m?.definitions?.[0];
+  return {
+    ipa: e.phonetic || e.phonetics?.find((p) => p.text)?.text || '',
+    pos: POS_TR[m?.partOfSpeech] || m?.partOfSpeech || '',
+    def: d?.definition || '',
+    example: d?.example || '',
+    synonyms: (m?.synonyms || []).slice(0, 3)
+  };
+}
+async function basicAI(term, context) {
+  const single = !/\s/.test(term.trim());
+  const lemma = single ? (lemmaCandidates(term.toLowerCase()).find((k) => oxLookup(k)) || term.toLowerCase()) : term;
+  const [mean, def, ctx] = await Promise.all([
+    freeTranslate(term).catch(() => ''),
+    single ? freeDefine(lemma).catch(() => null) : Promise.resolve(null),
+    context && context !== term && context.length < 450 ? freeTranslate(context).catch(() => '') : Promise.resolve('')
+  ]);
+  if (!mean && !def) throw new Error('temel kaynaklara ulaşılamadı');
+  return {
+    basic: true,
+    type: single ? 'word' : term.split(/\s+/).length > 6 ? 'sentence' : 'phrase',
+    term: single ? lemma : term,
+    ipa: def?.ipa || '',
+    pos: def?.pos || '',
+    meaning_tr: mean || '—',
+    explanation_tr: (def?.def ? 'İngilizce tanım: ' + def.def + ' ' : '') + '(Temel kart — AI kotası açılınca otomatik zenginleşir.)',
+    context_tr: ctx,
+    examples: def?.example ? [{ en: def.example, tr: '' }] : [],
+    synonyms: def?.synonyms || [],
+    key_phrases: []
+  };
+}
+
+let enriching = false, enrichTimer = null;
 async function enrichPending() {
   if (enriching || !navigator.onLine || !settings.apiKey) return;
   enriching = true;
+  let quotaUntil = 0;
   try {
-    for (const c of cards.filter((x) => x.status === 'pending')) {
-      try {
-        c.ai = await askGemini(c.term, c.context);
-        c.status = 'ready';
-        c.error = null;
-      } catch (e) {
-        c.error = friendlyGeminiError(e);
-        if (e.kind === 'quota' || e.kind === 'nokey' || e.kind === 'badkey') { await saveCard(c); break; }
+    // önce hiç anlamı olmayanlar, sonra temel kartların yükseltilmesi
+    const queue = [...cards.filter((x) => x.status === 'pending'), ...cards.filter((x) => x.status === 'ready' && x.ai?.basic)];
+    for (const c of queue) {
+      const wasBasic = !!c.ai?.basic;
+      if (quotaUntil && wasBasic) break; // kota dolu: yükseltmeyi sonraya bırak
+      if (!quotaUntil) {
+        try {
+          c.ai = await askGemini(c.term, c.context);
+          c.status = 'ready';
+          c.error = null;
+          await saveCard(c);
+          refreshUI();
+          continue;
+        } catch (e) {
+          c.error = friendlyGeminiError(e);
+          if (e.kind === 'nokey' || e.kind === 'badkey') { await saveCard(c); break; }
+          if (e.kind === 'quota') quotaUntil = e.until || now() + 3600e3;
+          else if (wasBasic) { await saveCard(c); continue; }
+        }
+      }
+      // AI yok: kart beklemede kalmasın, temel kartla hemen tekrar edilebilsin
+      if (!wasBasic) {
+        try {
+          c.ai = await basicAI(c.term, c.context);
+          c.status = 'ready';
+        } catch {}
       }
       await saveCard(c);
-      refreshBadges();
-      if (currentView === 'review' && !reviewState.card) renderReview();
-      if (currentView === 'list') renderList();
+      refreshUI();
     }
   } finally {
     enriching = false;
   }
+  // kota açılınca (uygulama açıksa) kendiliğinden tekrar dene
+  if (quotaUntil) {
+    clearTimeout(enrichTimer);
+    enrichTimer = setTimeout(enrichPending, Math.min(Math.max(quotaUntil - now(), 60e3) + 5e3, 6 * 3600e3));
+  }
+}
+function refreshUI() {
+  refreshBadges();
+  if (currentView === 'review' && !reviewState.card) renderReview();
+  if (currentView === 'list') renderList();
 }
 
 /* ---------- metin hazırlama ---------- */
@@ -302,7 +424,7 @@ function show(view) {
   if (view === 'read') { renderDiscover(); renderLibrary().then(drawDiscList); }
   if (view === 'review') renderReview();
   if (view === 'list') renderList();
-  if (view === 'settings') { renderSettings(); renderSourceSettings(); }
+  if (view === 'settings') { renderSettings(); renderSourceSettings(); renderSvcLog(); }
   if (view === 'add') renderTokens();
 }
 
@@ -529,7 +651,7 @@ function renderList() {
     <li class="item" data-id="${c.id}">
       <div class="head" data-toggle="${c.id}">
         <div><div class="t">${esc(c.term)}</div>
-          <div class="m">${c.status === 'ready' ? esc(c.ai.meaning_tr) : '<span class="tag-pending">AI bekliyor</span>'}</div></div>
+          <div class="m">${c.status === 'ready' ? esc(c.ai.meaning_tr) + (c.ai.basic ? ' <span class="tag-pending">temel</span>' : '') : '<span class="tag-pending">AI bekliyor</span>'}</div></div>
         <div class="due">${c.status === 'ready' ? esc(fmtDue(c.srs.due)) : ''}</div>
       </div>
       <div class="detail" ${openItems.has(c.id) ? '' : 'hidden'}>
@@ -784,10 +906,13 @@ async function getTweetText(tweetUrl, id) {
     try {
       const tw = await fn();
       const txt = cleanShared(tw?.text);
-      if (txt) return { text: txt, tweet: { ...tw, text: txt }, errs };
+      if (txt) { logSvc(name, true); return { text: txt, tweet: { ...tw, text: txt }, errs }; }
       errs.push(name + ': boş');
+      logSvc(name, false, 'boş yanıt');
     } catch (e) {
-      errs.push(name + ': ' + (e.name === 'AbortError' ? 'zaman aşımı' : e.message || 'erişilemedi (CORS/ağ)'));
+      const m = e.name === 'AbortError' ? 'zaman aşımı' : e.message || 'erişilemedi (CORS/ağ)';
+      errs.push(name + ': ' + m);
+      logSvc(name, false, m);
     }
   }
   return { text: '', errs };
@@ -852,7 +977,9 @@ async function runNetTest() {
     }
   }));
   box.innerHTML = res.join('');
+  renderSvcLog();
 }
+function renderSvcLog() { const el = $('#svcLog'); if (el) el.innerHTML = svcLogHTML(); }
 
 /* ---------- paylaşımdan gelen veri ---------- */
 function handleLaunchParams() {

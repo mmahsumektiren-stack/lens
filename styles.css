@@ -366,3 +366,4 @@ html.dev body::after {
   font: 700 10px/1 system-ui, sans-serif; letter-spacing: .12em; color: #fff;
   background: #c2410c; padding: 4px 8px; border-radius: 999px; opacity: .9;
 }
+.svc-err { margin: 2px 0 6px 22px; font-size: 12px; overflow-wrap: anywhere; }
