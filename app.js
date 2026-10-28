@@ -682,6 +682,7 @@ async function grade(g) {
 
 /* ----- Kartlar listesi ----- */
 const openItems = new Set();
+const openDicts = new Set();
 function renderList() {
   const q = $('#search').value.trim().toLowerCase();
   const list = cards
@@ -705,9 +706,10 @@ function renderList() {
         ${c.status === 'ready' ? detailHTML(c) : ''}
         <div class="item-acts">
           <div class="pair">
-            <button class="ghost act" data-act="now" data-id="${c.id}">${icon('review', 18)}<span>Şimdi tekrar et</span></button>
+            <button class="ghost act${openDicts.has(c.id) ? ' on' : ''}" data-act="dict" data-id="${c.id}">${icon('dict', 18)}<span>Sözlük</span></button>
             <button class="ghost act" data-act="regen" data-id="${c.id}">${icon('sparkle', 18)}<span>AI’yı yenile</span></button>
           </div>
+          ${openDicts.has(c.id) ? `<div class="dict-box">${dictPanelHTML(c.term)}</div>` : ''}
           <button class="danger-link" data-act="del" data-id="${c.id}">${icon('trash', 16)}<span>Kartı sil</span></button>
         </div>
       </div>
@@ -803,6 +805,8 @@ function bind() {
       toast('Deneniyor…');
       return enrichPending();
     }
+    const dl = e.target.closest('[data-dict]');
+    if (dl) { store.set('dictLast', dl.dataset.dict); return; } // bağlantı normal açılır
     const act = e.target.closest('[data-act]');
     if (act) {
       const c = cards.find((x) => x.id === act.dataset.id);
@@ -812,10 +816,8 @@ function bind() {
         await DB.del(c.id);
         cards = cards.filter((x) => x.id !== c.id);
         toast('Silindi');
-      } else if (act.dataset.act === 'now') {
-        c.srs.due = now();
-        await saveCard(c);
-        toast('Tekrar listesine eklendi');
+      } else if (act.dataset.act === 'dict') {
+        openDicts.has(c.id) ? openDicts.delete(c.id) : openDicts.add(c.id);
       } else if (act.dataset.act === 'regen') {
         c.status = 'pending';
         await saveCard(c);
