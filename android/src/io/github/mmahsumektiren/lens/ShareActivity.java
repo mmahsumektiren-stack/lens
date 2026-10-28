@@ -33,14 +33,18 @@ public class ShareActivity extends Activity {
         // bağlantı dışında kayda değer metin var mı? (ör. seçilip paylaşılan bir cümle)
         String rest = link != null ? text.replace(m.group(), "").trim() : text;
         if (subject != null && rest.equals(subject.trim())) rest = ""; // bazı uygulamalar başlığı metne de koyar
-        boolean onlyLink = link != null && rest.replaceAll("[\\s\\p{Punct}]", "").length() < 3;
+        // Sitenin kendi "Paylaş" düğmesi bağlantıya başlığı ya da ilk cümleyi ekler: kısa metin + düz bağlantı = sayfa paylaşımı.
+        // Seçilip paylaşılan metin ya bağlantısızdır ya da Chrome'un #:~:text= bağlantısını taşır; 60+ kelime = "Tümünü seç".
+        int restWords = rest.isEmpty() ? 0 : rest.split("\\s+").length;
+        boolean pageShare = link != null && !link.contains("#:~:text=") && restWords < 60;
 
-        if (onlyLink && REDDIT.matcher(link).find()) {
+        if (pageShare && REDDIT.matcher(link).find()) {
             start(ResolveActivity.class, "lensresolve://open?u=" + Uri.encode(link));
-        } else if (onlyLink && !X.matcher(link).find()) {
+        } else if (pageShare && !X.matcher(link).find()) {
             Intent f = new Intent(this, FetchActivity.class);
             f.setData(Uri.parse("lensfetch://open?u=" + Uri.encode(link)));
-            if (subject != null) f.putExtra(Intent.EXTRA_SUBJECT, subject);
+            String hint = subject != null && !subject.isEmpty() ? subject : rest.length() > 160 ? rest.substring(0, 160) : rest;
+            if (!hint.isEmpty()) f.putExtra(Intent.EXTRA_SUBJECT, hint);
             startActivity(f);
         } else {
             // Lens'in kendi paylaşım biçimi: ?text=&title=&url=

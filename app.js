@@ -442,6 +442,7 @@ let currentView = 'review';
 const TITLES = { review: 'Tekrar', read: 'Oku', add: 'Ekle', list: 'Kartlar', settings: 'Ayarlar', reader: '' };
 function show(view) {
   currentView = view;
+  $('#clipBanner').hidden = true; // pano önerisi yalnızca göründüğü ekranda kalır
   $$('.view').forEach((v) => (v.hidden = v.id !== 'view-' + view));
   $$('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
   $('#title').textContent = TITLES[view];
@@ -552,6 +553,7 @@ async function onSave() {
       id: uid(), term, context, source: addState.source || '', tweet: addState.tweet || null,
       createdAt: now(), status: 'pending', ai: null, error: null, seen: 1, srs: SRS.fresh()
     };
+    store.set('lastClip', cleanShared(text || term)); // az önce kaydedilen metni panodan tekrar önerme
     await saveCard(card);
     toast(settings.apiKey ? 'Kaydedildi, kart hazırlanıyor…' : 'Kaydedildi. Kart için Ayarlar’a API anahtarı ekle');
   }
@@ -1006,6 +1008,9 @@ async function checkClipboard() {
     if (perm && perm.state !== 'granted') return;
     const t = cleanShared(await navigator.clipboard.readText());
     if (!t || t.length > 1500 || !/[A-Za-z]{2}/.test(t) || t === store.get('lastClip', '')) return;
+    const n = normalizeText(t).toLowerCase();
+    if (cards.some((c) => normalizeText(c.term).toLowerCase() === n || normalizeText(c.context || '').toLowerCase() === n)) { store.set('lastClip', t); return; }
+    store.set('lastClip', t); // her metin yalnızca bir kez önerilir
     banner.querySelector('span').textContent = t.length > 80 ? t.slice(0, 80) + '…' : t;
     banner.dataset.text = t;
     banner.hidden = false;
@@ -1065,6 +1070,14 @@ function handleLaunchParams() {
   const source = url || linkInText;
   const tweetId = (source.match(/(?:x|twitter)\.com\/[^/]+\/status\/(\d+)/i) || [])[1];
   // Bir web sayfasının kendisi paylaşıldıysa (seçili metin yok, sadece link): okuyucuya aktar
+  // Sitenin kendi "Paylaş" düğmesi bağlantıya başlığı ya da ilk cümleyi ekler: kısa metin + düz sayfa bağlantısı da
+  // sayfa paylaşımıdır → okuyucu. (Seçilip paylaşılan metin ya bağlantısızdır ya da Chrome'un #:~:text= bağlantısını taşır.)
+  const pageShare = source && !tweetId && !/#:~:text=/.test(source) && wordCount(cleanShared(text)) < 60;
+  if (pageShare && cleanShared(text)) {
+    history.replaceState(null, '', location.pathname);
+    importArticle(source, cleanShared(title) || cleanShared(text).slice(0, 160));
+    return;
+  }
   if (!cleanShared(text) && source && !tweetId) {
     history.replaceState(null, '', location.pathname);
     importArticle(source, cleanShared(title));
