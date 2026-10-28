@@ -76,7 +76,7 @@ async function renderDiscover() {
   const list = $('#discList');
   if (!disc.data) {
     disc.data = feedCache()?.data || null;
-    if (!disc.data) list.innerHTML = '<li class="sub">Yazılar getiriliyor…</li>';
+    if (!disc.data) list.innerHTML = '<li class="loading-line"><span class="spinner sm"></span>Yazılar getiriliyor…</li>';
   }
   drawDiscList();
   try {
@@ -84,7 +84,7 @@ async function renderDiscover() {
     await loadFeed();
     if (disc.data?.generated !== before) drawDiscList();
   } catch {
-    if (!disc.data) list.innerHTML = '<li class="sub">Yazılar şu an getirilemedi. İnternet bağlantını kontrol edip sonra tekrar dene.</li>';
+    if (!disc.data) { list.innerHTML = `<li>${failHTML({ title: 'Yazılar getirilemedi', text: 'İnternet bağlantını kontrol edip tekrar dene.', secondary: [{ label: 'Tekrar dene', ico: 'refresh', id: 'discRetry' }] })}</li>`; $('#discRetry').onclick = () => renderDiscover(); }
   }
 }
 
@@ -106,12 +106,12 @@ function drawDiscList() {
     return `<li class="disc-item${done ? ' done' : ''}" data-link="${esc(it.link)}" data-title="${esc(it.title)}">
       ${it.image ? `<img src="${esc(it.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
       <div class="disc-txt">
-        <div class="disc-meta">${meta}${done ? ' · <b>✓ kütüphanede</b>' : ''}</div>
+        <div class="disc-meta">${meta}${done ? ` · <b class="in-lib">${icon('check', 13)}kütüphanede</b>` : ''}</div>
         <div class="disc-title">${esc(it.title)}</div>
         ${it.summary ? `<div class="disc-sum">${esc(it.summary)}</div>` : ''}
       </div>
     </li>`;
-  }).join('') : '<li class="sub">Bu sekmede şu an yazı yok.</li>';
+  }).join('') : `<li>${emptyHTML({ ico: 'article', title: 'Bu sekmede yazı yok', text: 'Başka bir sekmeye bak ya da Ayarlar → Keşfet kaynakları’ndan kaynak aç.' })}</li>`;
   $('#discMore').hidden = items.length <= disc.shown;
 }
 
@@ -145,6 +145,9 @@ async function renderSourceSettings() {
   const data = disc.data;
   if (!data) { box.innerHTML = '<div class="sub">Kaynak listesi için internet gerekli.</div>'; return; }
   const off = srcOff();
+  const usableN = usableSources(data).length;
+  const onN = usableSources(data).filter((s) => !off.has(s.id)).length;
+  $('#srcSummary').textContent = `${onN} / ${usableN} kaynak açık`;
   const groups = {};
   for (const s of data.sources) (groups[s.cat] = groups[s.cat] || []).push(s);
   box.innerHTML = DISC_TABS.filter(([k]) => groups[k]).map(([k, l]) => `
@@ -152,7 +155,7 @@ async function renderSourceSettings() {
     ${groups[k].map((s) => {
       const usable = s.count > 0 && !(Array.isArray(s.jina) && s.jina[0] === false);
       return `<label class="toggle"><input type="checkbox" data-src="${s.id}" ${off.has(s.id) ? '' : 'checked'} ${usable ? '' : 'disabled'}>
-        <span>${esc(s.name)}${usable ? '' : ' <small class="sub">— şu an alınamıyor</small>'}</span></label>`;
+        <span>${esc(s.name)}${usable ? '' : ' <small class="sub">şu an alınamıyor</small>'}</span></label>`;
     }).join('')}</div>`).join('');
 }
 function bindSourceSettings() {
@@ -162,5 +165,7 @@ function bindSourceSettings() {
     const off = srcOff();
     cb.checked ? off.delete(cb.dataset.src) : off.add(cb.dataset.src);
     store.set('srcOff', [...off]);
+    const n = $$('#srcSettings [data-src]'), on = n.filter((x) => x.checked && !x.disabled).length;
+    $('#srcSummary').textContent = `${on} / ${n.filter((x) => !x.disabled).length} kaynak açık`;
   });
 }

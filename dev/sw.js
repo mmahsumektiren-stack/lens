@@ -2,18 +2,19 @@
 // Asıl Lens (/lens/) ve test kopyası (/lens/dev/) aynı sitede: önbellekleri ayrı adlarla tutulur, birbirine dokunmaz.
 const BASE = new URL('./', self.location).pathname;
 const PREFIX = /\/dev\/$/.test(BASE) ? 'lensdev-' : 'lens-';
-const VERSION = PREFIX + 'v31';
+const VERSION = PREFIX + 'v32';
 const SHELL = [
   './',
   './index.html',
-  './styles.css?v=31',
-  './app.js?v=31',
-  './reader.js?v=31',
-  './sources.js?v=31',
-  './reader-extras.js?v=31',
-  './discover.js?v=31',
-  './readability.js?v=31',
-  './page-extract.js?v=31',
+  './styles.css?v=32',
+  './app.js?v=32',
+  './reader.js?v=32',
+  './sources.js?v=32',
+  './reader-extras.js?v=32',
+  './discover.js?v=32',
+  './icons.js?v=32',
+  './readability.js?v=32',
+  './page-extract.js?v=32',
   './oxford.json?v=2',
   './manifest.webmanifest',
   './icon-192.png',

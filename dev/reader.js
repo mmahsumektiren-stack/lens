@@ -206,7 +206,7 @@ async function importArticle(url, titleHint = '', opts = {}) {
   show('reader');
   const host = $('#readerBody');
   $('#readerSite').textContent = hostOf(url);
-  host.innerHTML = `<div class="r-loading"><div class="spinner"></div><p>Sayfa sadeleştiriliyor…</p><p class="sub">${esc(titleHint || url)}</p></div>`;
+  host.innerHTML = `<div class="r-loading"><div class="spinner"></div><p>Sayfa sadeleştiriliyor…</p><p class="sub r-url">${esc(titleHint || url)}</p></div>`;
   const errs = window.launchErr ? [window.launchErr] : [];
   if (window.launchErr) logSvc(/^Lens Seçim/.test(window.launchErr) ? 'reddit-telefon' : 'telefon', false, hostOf(url) + ': ' + window.launchErr.replace(/^(telefon|Lens Seçim): /, ''));
   window.launchErr = '';
@@ -247,33 +247,28 @@ async function importArticle(url, titleHint = '', opts = {}) {
   }
   store.set('failedImport', { url, title: titleHint, at: now() });
   if (isReddit(url)) {
-    host.innerHTML = `<div class="r-loading fail">
-      <p><b>Reddit gönderisi buradan açılamadı.</b></p>
-      <p>Reddit, Lens gibi web uygulamalarının gönderiyi okumasına izin vermiyor. <b>Lens Seçim</b> uygulaması gönderiyi telefonundan alıp burada açar.</p>
-      <div class="row" style="justify-content:center">
-        <a class="primary" href="${esc(resolveIntentUrl(url))}" style="text-decoration:none;padding:11px 16px;border-radius:var(--radius)">Lens Seçim ile aç</a>
-        <button class="ghost" id="rRetry">Tekrar dene</button>
-      </div>
-      <p class="sub">İpucu: Reddit'te <b>Paylaş → ${IS_DEV ? 'Lens Test' : 'Lens'}</b> dersen gönderi doğrudan açılır, bu ekran hiç çıkmaz.</p>
-      <details class="sub"><summary>Teknik ayrıntı</summary>${esc(errs.join(' · '))}</details></div>`;
+    host.innerHTML = `<div class="r-loading">${failHTML({
+      title: 'Reddit gönderisi buradan açılamadı',
+      text: 'Reddit, Lens gibi web uygulamalarının gönderiyi okumasına izin vermiyor. <b>Lens Seçim</b> gönderiyi telefonundan alıp burada açar.',
+      primary: { label: 'Lens Seçim ile aç', ico: 'phone', href: resolveIntentUrl(url), primary: true },
+      secondary: [{ label: 'Tekrar dene', ico: 'refresh', id: 'rRetry' }],
+      note: `İpucu: Reddit'te <b>Paylaş → ${IS_DEV ? 'Lens Test' : 'Lens'}</b> dersen gönderi doğrudan açılır, bu ekran hiç çıkmaz.`,
+      details: errs.join(' · ')
+    })}</div>`;
     $('#rRetry').onclick = () => importArticle(url, titleHint);
     return;
   }
   const blocked = errs.some((e) => /metin çok kısa|engel sayfası|HTTP 40[13]|HTTP 451/.test(e));
-  host.innerHTML = `<div class="r-loading fail">
-    <p><b>Bu sayfa getirilemedi.</b></p>
-    <p>${blocked ? 'Bu site otomatik erişimi engelliyor (bot koruması). Uzaktan hiçbir servis sayfayı alamıyor, ama sen tarayıcında zaten görüyorsun:' : 'Okuma servislerine ulaşılamadı. Tekrar deneyebilir ya da metni tarayıcından gönderebilirsin:'}</p>
-    <ol class="steps">
-      <li>Sayfayı Chrome'da aç</li>
-      <li>Yazının üstüne uzun bas → <b>Tümünü seç</b></li>
-      <li><b>Paylaş → Lens</b> — yazı okuyucuda açılır</li>
-    </ol>
-    <div class="row" style="justify-content:center">
-      ${opts.page ? '' : `<a class="primary" href="${esc(fetchIntentUrl(url))}" style="text-decoration:none;padding:11px 16px;border-radius:var(--radius)">Telefonla aç</a>`}
-      <a class="ghost" href="${esc(url)}" target="_blank" rel="noopener" style="text-decoration:none;padding:11px 16px">Sayfayı aç ↗</a>
-      <button class="ghost" id="rRetry">Tekrar dene</button>
-    </div>
-    <details class="sub"><summary>Teknik ayrıntı</summary>${esc(errs.join(' · '))}</details></div>`;
+  host.innerHTML = `<div class="r-loading">${failHTML({
+    title: 'Bu sayfa getirilemedi',
+    text: blocked
+      ? 'Site otomatik erişimi engelliyor (bot koruması).' + (opts.page ? '' : ' <b>Telefonla aç</b> sayfayı senin bağlantınla açar, çoğu sitede işe yarar.')
+      : 'Okuma servislerine ulaşılamadı. Tekrar deneyebilir ya da sayfayı telefonla açabilirsin.',
+    primary: opts.page ? null : { label: 'Telefonla aç', ico: 'phone', href: fetchIntentUrl(url), primary: true },
+    secondary: [{ label: 'Sayfayı aç', ico: 'external', href: url }, { label: 'Tekrar dene', ico: 'refresh', id: 'rRetry' }],
+    note: 'O da olmazsa: sayfayı Chrome’da aç → yazıya uzun bas → <b>Tümünü seç</b> → <b>Paylaş → Lens</b>.',
+    details: errs.join(' · ')
+  })}</div>`;
   $('#rRetry').onclick = () => importArticle(url, titleHint);
 }
 
@@ -355,12 +350,12 @@ async function renderLibrary() {
       ${a.image ? `<img src="${esc(a.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
       <div class="lib-txt">
         <div class="lib-title">${esc(a.title)}</div>
-        <div class="sub">${esc(a.site)} · ${a.minutes} dk${a.progress > 0.97 ? ' · bitti ✓' : a.progress > 0.02 ? ` · %${Math.round(a.progress * 100)}` : ''}</div>
+        <div class="sub">${esc(a.site)} · ${a.minutes} dk${a.progress > 0.97 ? ' · bitti' : a.progress > 0.02 ? ` · %${Math.round(a.progress * 100)}` : ''}</div>
         ${a.diff ? `<div class="lib-diff">${diffBadge(a)}${a.looked?.length ? ` <span class="sub">· ${a.looked.length} kelimeye baktın</span>` : ''}</div>` : ''}
         <div class="lib-bar"><span style="width:${Math.round((a.progress || 0) * 100)}%"></span></div>
       </div>
-      <button class="lib-del" data-del="${a.id}" aria-label="Sil">✕</button>
-    </li>`).join('') : `<div class="empty"><span class="big-ico">📰</span>Henüz yazı yok. Chrome'da bir haberi açıp ⋮ → Paylaş → <b>Lens</b> de, ya da linki yukarıya yapıştır.</div>`;
+      <button class="lib-del icon-btn" data-del="${a.id}" aria-label="Sil">${icon('close', 18)}</button>
+    </li>`).join('') : emptyHTML({ ico: 'article', title: 'Kütüphanen boş', text: 'Keşfet’ten bir yazı seç, Chrome’da bir sayfayı ⋮ → Paylaş → <b>Lens</b> ile gönder ya da linki yukarıya yapıştır.' });
 }
 
 /* ---------- okuyucu ---------- */
@@ -414,7 +409,7 @@ function renderArticle() {
     if (bl.t === 'h' && b < 3 && tnorm(bl.text) === tnorm(a.title)) return ''; // başlığın içerikteki kopyası
     if (bl.t === 'img') return `<img class="r-img" src="${esc(bl.src)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`;
     const tag = { h: 'h2', li: 'li', q: 'blockquote', cap: 'p', p: 'p' }[bl.t] || 'p';
-    const tr = a.trans?.[b] && a.showTr?.[b] ? `<div class="r-tr" data-trof="${b}">${esc(a.trans[b])}</div>` : '';
+    const tr = a.trans?.[b] && a.showTr?.[b] ? `<div class="r-tr" data-trof="${b}"><span class="r-tr-l">Türkçe</span>${esc(a.trans[b])}</div>` : '';
     return `<${tag} class="rb rb-${bl.t}" data-block="${b}">${textHTML(bl.text, b)}</${tag}>${tr}`;
   });
   $('#readerBody').innerHTML = `
@@ -426,7 +421,7 @@ function renderArticle() {
     ${a.image && !a.blocks.some((x) => x.t === 'img') ? `<img class="r-img" src="${esc(a.image)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
     <div class="r-text">${parts.join('')}</div>
     <section class="r-sum" id="rSum">${endSummaryHTML(a)}</section>
-    <footer class="r-end">${a.url ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">Orijinal sayfa ↗</a>` : ''}</footer>`;
+    <footer class="r-end">${a.url ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">Orijinal sayfa ${icon('external', 14)}</a>` : ''}</footer>`;
   if (rd.sel) markSelection();
 }
 
@@ -486,17 +481,17 @@ async function openSheet() {
     <div class="sh-top">
       <div class="sh-term">${esc(term)}</div>
       ${ox && LEVELS[ox.level] ? `<span class="lv l${ox.level}">${LEVELS[ox.level]}</span>` : ''}
-      <button class="speak" data-speak="${esc(term)}" aria-label="Sesli oku">🔊</button>
-      <button class="sh-x" id="shClose" aria-label="Kapat">✕</button>
+      <button class="speak" data-speak="${esc(term)}" aria-label="Sesli oku">${icon('speak', 18)}</button>
+      <button class="sh-x icon-btn" id="shClose" aria-label="Kapat">${icon('close', 20)}</button>
     </div>
     <div class="sub sh-ipa"></div>
     <div id="shBody" class="sh-body"><div class="sub">${settings.apiKey ? 'Anlam getiriliyor…' : 'Anlam için Ayarlar’dan Gemini anahtarı ekle.'}</div></div>
     <div class="sh-actions">
-      <button class="primary" id="shAdd">${inCards ? '✓ Kartlarında' : '＋ Kartlara ekle'}</button>
-      <button class="ghost${rd.extend ? ' on' : ''}" id="shExt">↔ Kalıp seç</button>
-      <button class="ghost" id="shTr">¶ Çevir</button>
-      <button class="ghost" id="shRead">¶ Dinle</button>
-      <button class="ghost" id="shDictBtn">📚 Sözlük</button>
+      <button class="primary act" id="shAdd">${inCards ? icon('check', 18) + '<span>Kartlarında</span>' : icon('plus', 18) + '<span>Kartlara ekle</span>'}</button>
+      <button class="ghost act${rd.extend ? ' on' : ''}" id="shExt">${icon('phrase', 18)}<span>Kalıp seç</span></button>
+      <button class="ghost act" id="shDictBtn">${icon('dict', 18)}<span>Sözlük</span></button>
+      <button class="ghost act" id="shTr">${icon('translate', 18)}<span>Paragrafı çevir</span></button>
+      <button class="ghost act" id="shRead">${icon('play', 18)}<span>Paragrafı dinle</span></button>
     </div>
     <div id="shDict" class="sh-dict" hidden></div>`;
   recordLooked(term, sentence);
@@ -530,7 +525,7 @@ async function openSheet() {
       return;
     }
     $('#shBody').innerHTML = `<div class="sub">${esc(friendlyGeminiError(e))}</div>
-      <a class="sub" href="${gt}" target="_blank" rel="noopener">Google Çeviri'de aç ↗</a>`;
+      <a class="sub" href="${gt}" target="_blank" rel="noopener">Google Çeviri'de aç ${icon('external', 14)}</a>`;
   }
 }
 function closeSheet() {
@@ -570,7 +565,7 @@ async function addSelectionToCards() {
   markSelection();
   window.scrollTo(0, y);
   const btn = $('#shAdd');
-  if (btn) btn.textContent = '✓ Kartlarında';
+  if (btn) btn.innerHTML = icon('check', 18) + '<span>Kartlarında</span>';
 }
 
 async function translateBlock(b) {
@@ -608,7 +603,7 @@ function readBlocksFrom(b) {
   stopReadAloud();
   if (!('speechSynthesis' in window)) return toast('Bu tarayıcıda sesli okuma yok');
   rd.reading = true;
-  $('#rListen').textContent = '⏹';
+  $('#rListen').innerHTML = icon('stop', 22);
   const step = (i) => {
     const blocks = rd.art.blocks;
     while (i < blocks.length && !blocks[i].text) i++;
@@ -631,7 +626,7 @@ function stopReadAloud() {
   if ('speechSynthesis' in window) speechSynthesis.cancel();
   $$('#readerBody .rb.reading').forEach((x) => x.classList.remove('reading'));
   const btn = $('#rListen');
-  if (btn) btn.textContent = '🎧';
+  if (btn) btn.innerHTML = icon('listen', 22);
 }
 function firstVisibleBlock() {
   const els = $$('#readerBody .rb');
@@ -651,7 +646,7 @@ function renderPrefs() {
       ${[['auto', 'Oto'], ['light', 'Açık'], ['sepia', 'Sepya'], ['dark', 'Koyu']].map(([k, l]) => `<button data-theme="${k}" class="${readPrefs.theme === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
     <div class="pref"><span>Oxford vurgusu</span><div class="seg">
       ${[[0, 'Kapalı'], [1, 'Hepsi'], [2, 'A2+'], [3, 'B1+'], [4, 'B2+'], [5, 'C1']].map(([k, l]) => `<button data-ox="${k}" class="${readPrefs.ox === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
-    <div class="legend"><span class="w ox l3">altı çizili</span> Oxford listesinde · <span class="w kn">noktalı</span> kartlarında var</div>`;
+    <div class="legend"><span class="w ox l3">altı çizili</span> Oxford listesinde, seçtiğin seviye ve üstü · <span class="w kn">yeşil zeminli</span> kartlarında var</div>`;
 }
 
 function bindReader() {
