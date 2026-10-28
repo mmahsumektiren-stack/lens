@@ -438,7 +438,7 @@ function speak(text) {
 }
 
 /* ---------- görünümler ---------- */
-let currentView = 'review';
+let currentView = 'read';
 const TITLES = { review: 'Tekrar', read: 'Oku', add: 'Ekle', list: 'Kartlar', settings: 'Ayarlar', reader: '' };
 function show(view) {
   currentView = view;
@@ -1124,7 +1124,7 @@ function handleLaunchParams() {
     if (p.get('paste')) setTimeout(pasteFromClipboard, 300);
     return;
   }
-  show('review');
+  show('read'); // uygulama Oku ekranıyla (Kütüphanem) açılır
 }
 
 /* ---------- başlat ---------- */
