@@ -345,7 +345,7 @@ async function renderLibrary() {
   articles = articles.filter((x) => !looksBlocked(x.title, x.blocks));
   const list = articles.slice().sort((a, b) => (b.lastOpened || b.createdAt) - (a.lastOpened || a.createdAt));
   await ensureDifficulty(list);
-  $('#libList').innerHTML = list.length ? list.map((a) => `
+  const itemHTML = (a) => `
     <li class="lib-item" data-open="${a.id}">
       ${a.image ? `<img src="${esc(a.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
       <div class="lib-txt">
@@ -355,7 +355,15 @@ async function renderLibrary() {
         <div class="lib-bar"><span style="width:${Math.round((a.progress || 0) * 100)}%"></span></div>
       </div>
       <button class="lib-del icon-btn" data-del="${a.id}" aria-label="Sil">${icon('close', 18)}</button>
-    </li>`).join('') : emptyHTML({ ico: 'article', title: 'Kütüphanen boş', text: 'Keşfet’ten bir yazı seç, Chrome’da bir sayfayı ⋮ → Paylaş → <b>Lens</b> ile gönder ya da linki yukarıya yapıştır.' });
+    </li>`;
+  const going = list.filter((a) => a.progress > 0.02 && a.progress < 0.97);
+  const rest = list.filter((a) => !going.includes(a));
+  const head = (t) => `<li class="lib-h">${t}</li>`;
+  $('#libList').innerHTML = !list.length ? emptyHTML({ ico: 'article', title: 'Kütüphanen boş', text: 'Chrome’da bir sayfayı ⋮ → Paylaş → <b>Lens</b> ile gönder, linki yukarıya yapıştır ya da Keşfet’ten bir yazı seç.',
+      action: actionHTML({ label: 'Keşfet’e göz at', ico: 'read', id: 'emptyDisc' }) })
+    : going.length
+    ? head('Okumaya devam et') + going.map(itemHTML).join('') + (rest.length ? head('Diğer yazılar') + rest.map(itemHTML).join('') : '')
+    : list.map(itemHTML).join('');
 }
 
 /* ---------- okuyucu ---------- */

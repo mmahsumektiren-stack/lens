@@ -447,11 +447,21 @@ function show(view) {
   $('#title').textContent = TITLES[view];
   document.body.classList.toggle('reading', view === 'reader');
   if (view !== 'reader' && typeof closeSheet === 'function') { closeSheet(); stopReadAloud(); }
-  if (view === 'read') { renderDiscover(); renderLibrary().then(drawDiscList); }
+  if (view === 'read') { setReadPane(readReturn || 'lib'); readReturn = null; renderDiscover(); renderLibrary().then(drawDiscList); }
   if (view === 'review') renderReview();
   if (view === 'list') renderList();
   if (view === 'settings') { renderSettings(); renderSourceSettings(); renderSvcLog(); }
   if (view === 'add') renderTokens();
+}
+
+// Oku ekranı: Kütüphanem / Keşfet. Keşfet'ten açılan yazıdan geri dönünce Keşfet'te kalınır.
+let readReturn = null;
+function setReadPane(p) {
+  $('#paneLib').hidden = p !== 'lib';
+  $('#paneDisc').hidden = p !== 'disc';
+  $('#paneLibBtn').setAttribute('aria-selected', p === 'lib');
+  $('#paneDiscBtn').setAttribute('aria-selected', p === 'disc');
+  if (p === 'disc') markDiscSeen();
 }
 
 function dueCards() {
@@ -718,6 +728,7 @@ function renderSettings() {
 /* ---------- olaylar ---------- */
 function bind() {
   $$('.tabs button').forEach((b) => b.addEventListener('click', () => show(b.dataset.view)));
+  $$('.seg-tabs [data-pane]').forEach((b) => b.addEventListener('click', () => { setReadPane(b.dataset.pane); window.scrollTo(0, 0); }));
 
   $('#addText').addEventListener('input', () => { addState.selected.clear(); addState.editing = true; renderTokens(); });
   // yazma bitince (kutudan çıkınca) dokunulabilir kelimelere geç
@@ -735,7 +746,10 @@ function bind() {
     $('#addText').focus();
   });
   // boş ekranlardaki "Metin ekle"
-  document.addEventListener('click', (e) => { if (e.target.closest('#emptyAdd')) show('add'); });
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('#emptyAdd')) show('add');
+    if (e.target.closest('#emptyDisc')) setReadPane('disc');
+  });
   $('#addText').addEventListener('change', () => {
     // metin elle değiştiyse artık birebir tweet değil
     if (addState.tweet && normalizeText($('#addText').value) !== normalizeText(addState.tweet.text)) { addState.tweet = null; renderTokens(); }
