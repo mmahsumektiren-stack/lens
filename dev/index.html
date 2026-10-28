@@ -9,7 +9,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=32">
+  <link rel="stylesheet" href="styles.css?v=33">
 </head>
 <body>
   <header class="top">
@@ -52,19 +52,25 @@
 
     <!-- OKU (kütüphane) -->
     <section id="view-read" class="view" hidden>
-      <section class="discover">
-        <div class="sec-head"><h2>Keşfet</h2><span id="discAge" class="sub"></span><button id="discRefresh" class="icon-btn" aria-label="Yenile"><span data-icon="refresh"></span></button></div>
+      <!-- Oku her açılışta Kütüphanem ile başlar; Keşfet ayrı sekmede, yeni yazı sayısıyla -->
+      <div class="seg-tabs" role="tablist" aria-label="Oku">
+        <button role="tab" id="paneLibBtn" data-pane="lib" aria-selected="true">Kütüphanem</button>
+        <button role="tab" id="paneDiscBtn" data-pane="disc" aria-selected="false">Keşfet<span id="discNew" class="new-n" hidden></span></button>
+      </div>
+      <div id="paneLib" class="pane">
+        <div class="lib-add">
+          <input id="libUrl" type="url" inputmode="url" placeholder="Haber ya da yazı linki yapıştır…">
+          <button id="libGo" class="primary">Getir</button>
+        </div>
+        <ul id="libList" class="lib"></ul>
+        <p class="hint">Chrome'da bir sayfayı açıp ⋮ → Paylaş → <b>Lens</b> dediğinde de buraya gelir.</p>
+      </div>
+      <section id="paneDisc" class="pane discover" hidden>
+        <div class="sec-head"><span id="discAge" class="sub"></span><button id="discRefresh" class="icon-btn" aria-label="Yenile"><span data-icon="refresh"></span></button></div>
         <div id="discTabs" class="chipbar"></div>
         <ul id="discList" class="disc"></ul>
         <button id="discMore" class="ghost" hidden>Daha fazla</button>
       </section>
-      <div class="sec-head"><h2>Kütüphanem</h2></div>
-      <div class="lib-add">
-        <input id="libUrl" type="url" inputmode="url" placeholder="Haber ya da yazı linki yapıştır…">
-        <button id="libGo" class="primary">Getir</button>
-      </div>
-      <p class="hint">Chrome'da bir sayfayı açıp ⋮ → Paylaş → <b>Lens</b> dediğinde de buraya gelir.</p>
-      <ul id="libList" class="lib"></ul>
     </section>
 
     <!-- OKUYUCU -->
@@ -167,13 +173,13 @@
 
   <div id="toast" class="toast" hidden></div>
 
-  <script src="icons.js?v=32"></script>
-  <script src="readability.js?v=32"></script>
-  <script src="page-extract.js?v=32"></script>
-  <script src="reader.js?v=32"></script>
-  <script src="sources.js?v=32"></script>
-  <script src="reader-extras.js?v=32"></script>
-  <script src="discover.js?v=32"></script>
-  <script src="app.js?v=32"></script>
+  <script src="icons.js?v=33"></script>
+  <script src="readability.js?v=33"></script>
+  <script src="page-extract.js?v=33"></script>
+  <script src="reader.js?v=33"></script>
+  <script src="sources.js?v=33"></script>
+  <script src="reader-extras.js?v=33"></script>
+  <script src="discover.js?v=33"></script>
+  <script src="app.js?v=33"></script>
 </body>
 </html>

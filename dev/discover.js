@@ -70,6 +70,27 @@ function discItems() {
   return [...byLink.values()];
 }
 
+// son bakıştan beri gelen yazılar (açık kaynaklar, tüm sekmeler)
+function discNewCount() {
+  if (!disc.data) return 0;
+  const seen = store.get('discSeen', 0);
+  if (!seen) return 0; // ilk kez: hepsine "yeni" demeyelim
+  const ok = new Set(usableSources(disc.data).map((s) => s.id)), off = srcOff();
+  const links = new Set();
+  for (const it of disc.data.items) if (ok.has(it.src) && !off.has(it.src) && (Date.parse(it.date || '') || 0) > seen) links.add(normUrl(it.link));
+  return links.size;
+}
+function updateDiscBadge() {
+  const n = $('#paneDisc').hidden ? discNewCount() : 0;
+  const el = $('#discNew');
+  el.hidden = !n;
+  el.textContent = n > 99 ? '99+ yeni' : n + ' yeni';
+}
+function markDiscSeen() {
+  store.set('discSeen', now());
+  $('#discNew').hidden = true;
+}
+
 async function renderDiscover() {
   const tabs = $('#discTabs');
   tabs.innerHTML = DISC_TABS.map(([k, l]) => `<button class="chip${disc.tab === k ? ' on' : ''}" data-tab="${k}">${l}</button>`).join('');
@@ -83,6 +104,7 @@ async function renderDiscover() {
     const before = disc.data?.generated;
     await loadFeed();
     if (disc.data?.generated !== before) drawDiscList();
+    updateDiscBadge();
   } catch {
     if (!disc.data) { list.innerHTML = `<li>${failHTML({ title: 'Yazılar getirilemedi', text: 'İnternet bağlantını kontrol edip tekrar dene.', secondary: [{ label: 'Tekrar dene', ico: 'refresh', id: 'discRetry' }] })}</li>`; $('#discRetry').onclick = () => renderDiscover(); }
   }
@@ -128,7 +150,7 @@ function bindDiscover() {
   });
   $('#discList').addEventListener('click', (e) => {
     const it = e.target.closest('[data-link]');
-    if (it) importArticle(it.dataset.link, it.dataset.title);
+    if (it) { readReturn = 'disc'; importArticle(it.dataset.link, it.dataset.title); }
   });
   $('#discMore').addEventListener('click', () => { disc.shown += 15; drawDiscList(); });
   $('#discRefresh').addEventListener('click', async () => {
