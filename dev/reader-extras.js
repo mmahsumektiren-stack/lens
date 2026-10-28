@@ -124,8 +124,8 @@ async function addLookedToCards() {
     if (cardFor(x.term)) continue;
     const ai = rd.cache.get(x.term.toLowerCase() + '|' + x.sentence) || aiCacheGet(x.term.toLowerCase() + '|' + x.sentence) || null;
     await saveCard({
-      id: uid(), term: x.term, context: x.sentence, source: a.url, tweet: null,
-      article: { id: a.id, title: a.title, site: a.site },
+      id: uid(), term: x.term, context: x.sentence, source: a.url, tweet: a.tweet || null,
+      article: a.tweet ? null : { id: a.id, title: a.title, site: a.site },
       createdAt: now(), status: ai ? 'ready' : 'pending', ai, error: null, seen: 1, srs: SRS.fresh()
     });
     n++;

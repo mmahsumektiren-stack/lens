@@ -361,6 +361,12 @@ body.reading main { padding: 0; max-width: none; }
 .r-text blockquote { border-left: 3px solid var(--r-line); padding-left: var(--s3); color: var(--r-muted); font-style: italic; }
 .r-text .rb-cap { color: var(--r-muted); font-size: .85em; margin-top: -6px; }
 .rb.reading { background: color-mix(in srgb, var(--accent) 14%, transparent); border-radius: 6px; }
+/* okuyucuda tweet */
+.r-tweet { margin-top: var(--s2); }
+.r-tweet .tw-text { font-size: 1em; line-height: 1.5; }
+.r-tweet .r-tr { margin: var(--s2) 0; white-space: normal; }
+.r-tw-hint { margin: var(--s3) 0 0; font-family: system-ui, sans-serif; }
+
 /* paragraf çevirisi: alıntıdan ayrı, Türkçe olduğu belli bir kutu */
 .r-tr { font-family: system-ui, sans-serif; font-size: .88em; line-height: 1.55; color: var(--r-text);
   background: color-mix(in srgb, var(--accent) 10%, var(--r-bg)); border-radius: var(--r-s); padding: 10px var(--s3); margin: -8px 0 1.25em; }

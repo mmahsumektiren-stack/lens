@@ -1091,6 +1091,12 @@ function handleLaunchParams() {
     return;
   }
 
+  // X'in paylaş düğmesi yalnızca bağlantı gönderir → tweet okuyucuda açılır (dokununca anlam, sözlük, çeviri)
+  if (!body && tweetId) {
+    history.replaceState(null, '', location.pathname);
+    openTweet(source, tweetId);
+    return;
+  }
   if (body || tweetId) {
     addState.fromShare = true;
     addState.source = source;
