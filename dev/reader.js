@@ -3,46 +3,47 @@
 
 /* ---------- Oxford 3000/5000 (resmi CEFR listeleri, offline) ----------
    Kaynak: oxfordlearnersdictionaries.com — The Oxford 3000 / 5000 by CEFR level (PDF), © Oxford University Press.
-   oxford.json: { kelime: seviye }  1=A1 2=A2 3=B1 4=B2 5=C1 */
+   oxford.json (tools/oxford_parse.py üretir): { h: {başlık: seviye}, f: {çekimli biçim: başlık} }  1=A1 … 5=C1
+   Bir kelime listede sayılır ancak ya kendisi başlıksa ya da bir başlığın kelime türüne uygun dilbilgisel çekimiyse
+   (structures → structure, stopped → stop, bigger → big, children → child). Türetmeler (-ly, -ness, "yapan" -er)
+   köke indirilmez: stably ≠ stab, killer ≠ kill — Oxford Text Checker da böyle çalışır. */
 const LEVELS = ['', 'A1', 'A2', 'B1', 'B2', 'C1'];
-let OX = null;
+let OX = null, OXF = {};
 async function loadOxford() {
   if (OX) return OX;
   try {
-    OX = await (await fetch('oxford.json?v=2')).json();
-    for (const k in OX) if (Array.isArray(OX[k])) OX[k] = OX[k][0]; // eski biçime karşı koruma
+    const j = await (await fetch('oxford.json?v=3')).json();
+    if (j && j.h) { OX = j.h; OXF = j.f || {}; } else OX = j || {}; // eski biçime karşı koruma
   } catch { OX = {}; }
   return OX;
 }
-// basit kök bulma: tariffs → tariff, announced → announce, studies → study
-const IRREGULAR = (() => {
-  const m = {};
-  'am is are was were been being:be|has had having:have|does did done doing:do|said says:say|went gone goes:go|got gotten:get|made:make|took taken:take|saw seen:see|came:come|knew known:know|thought:think|gave given:give|found:find|told:tell|became:become|left:leave|felt:feel|brought:bring|began begun:begin|kept:keep|held:hold|wrote written:write|stood:stand|heard:hear|meant:mean|met:meet|ran:run|paid:pay|sat:sit|spoke spoken:speak|led:lead|grew grown:grow|lost:lose|fell fallen:fall|sent:send|built:build|understood:understand|drew drawn:draw|broke broken:break|spent:spend|rose risen:rise|drove driven:drive|bought:buy|wore worn:wear|chose chosen:choose|sought:seek|threw thrown:throw|caught:catch|dealt:deal|won:win|forgot forgotten:forget|sold:sell|fought:fight|taught:teach|ate eaten:eat|sang sung:sing|drank drunk:drink|slept:sleep|flew flown:fly|hid hidden:hide|shot:shoot|fed:feed|rode ridden:ride|shook shaken:shake|stole stolen:steal|woke woken:wake|bore born:bear|beaten:beat|bit bitten:bite|blew blown:blow|dug:dig|hung:hang|laid:lay|lent:lend|lit:light|shone:shine|sank sunk:sink|stuck:stick|struck:strike|swam swum:swim|swung:swing|tore torn:tear|froze frozen:freeze|forgave forgiven:forgive|arose arisen:arise|fled:flee|bent:bend|bound:bind|sped:speed|swore sworn:swear|wept:weep|withdrew withdrawn:withdraw|undertook undertaken:undertake|overcame:overcome|men:man|women:woman|children:child|feet:foot|teeth:tooth|mice:mouse|better best:good|worse worst:bad|further furthest farther farthest:far|lives:life|wives:wife|knives:knife|leaves:leaf|halves:half|selves:self|analyses:analysis|crises:crisis|criteria:criterion|phenomena:phenomenon|data:data|media:media'.split('|').forEach((g) => { const [forms, base] = g.split(':'); forms.split(' ').forEach((f) => (m[f] = base)); });
-  return m;
-})();
-function lemmaCandidates(w) {
-  w = w.toLowerCase().replace(/[’]/g, "'").replace(/'s$/, '');
+function normWord(w) {
+  w = w.toLowerCase().replace(/[’]/g, "'").replace(/'s$/, '').replace(/'$/, '');
   // kısaltmalar: don't → do, we'll → we, can't → can, won't → will
-  if (/n't$/.test(w)) w = { "won't": 'will', "can't": 'can', "shan't": 'shall', "ain't": 'be' }[w] || w.slice(0, -3);
-  else w = w.replace(/'(ll|re|ve|d|m)$/, '');
+  if (/n't$/.test(w)) return { "won't": 'will', "can't": 'can', "shan't": 'shall', "ain't": 'be' }[w] || w.slice(0, -3);
+  return w.replace(/'(ll|re|ve|d|m)$/, '');
+}
+function oxLookup(w) {
+  if (!OX) return null;
+  w = normWord(w);
+  const k = OX[w] ? w : OXF[w];
+  return k && OX[k] ? { word: k, level: OX[k] } : null;
+}
+// "kartlarında var" eşleşmesi için anahtarlar: kelimenin kendisi, Oxford başlığı;
+// listede olmayan kelimelerde yalnız çekim ekleri (s/ed/ing) gevşekçe soyulur — türetme ekleri asla.
+function lemmaCandidates(w) {
+  w = normWord(w);
   const c = [w];
-  if (IRREGULAR[w]) c.unshift(IRREGULAR[w]);
-  const add = (x) => x.length > 1 && !c.includes(x) && c.push(x);
+  const o = oxLookup(w);
+  if (o) { if (o.word !== w) c.unshift(o.word); return c; }
+  const add = (x) => x.length > 2 && !c.includes(x) && c.push(x);
   if (w.endsWith('ies')) add(w.slice(0, -3) + 'y');
-  if (w.endsWith('es')) add(w.slice(0, -2));
+  if (/(s|x|z|ch|sh)es$/.test(w)) add(w.slice(0, -2));
   if (w.endsWith('s') && !w.endsWith('ss')) add(w.slice(0, -1));
   if (w.endsWith('ied')) add(w.slice(0, -3) + 'y');
   if (w.endsWith('ed')) { add(w.slice(0, -2)); add(w.slice(0, -1)); if (/(.)\1ed$/.test(w)) add(w.slice(0, -3)); }
   if (w.endsWith('ing')) { add(w.slice(0, -3)); add(w.slice(0, -3) + 'e'); if (/(.)\1ing$/.test(w)) add(w.slice(0, -4)); }
-  if (w.endsWith('er')) { add(w.slice(0, -2)); add(w.slice(0, -1)); }
-  if (w.endsWith('est')) { add(w.slice(0, -3)); add(w.slice(0, -2)); }
-  // -ly zarfları kökle eşleştirilmez (stably → stab yanlış çıkıyordu); Oxford da zarfları kendi başlığıyla listeler
   return c;
-}
-function oxLookup(w) {
-  if (!OX) return null;
-  for (const k of lemmaCandidates(w)) if (OX[k]) return { word: k, level: OX[k] };
-  return null;
 }
 function knownSet() {
   const set = new Set();
