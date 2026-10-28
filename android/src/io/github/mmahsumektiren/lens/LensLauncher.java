@@ -22,6 +22,15 @@ final class LensLauncher {
         return Uri.parse(BASE).buildUpon().appendQueryParameter("text", text).build();
     }
 
+    /** Lens'i açar; büyük veri adresin # kısmında gider (sunucuya gönderilmez, adres sınırına takılmaz). */
+    static Uri dataUri(String url, String title, String key, String value) {
+        Uri.Builder b = Uri.parse(BASE).buildUpon();
+        if (url != null) b.appendQueryParameter("url", url);
+        if (title != null && !title.isEmpty()) b.appendQueryParameter("title", title);
+        if (key != null && value != null) b.encodedFragment(key + "=" + Uri.encode(value));
+        return b.build();
+    }
+
     static void open(Activity from, Uri uri) {
         Intent view = new Intent(Intent.ACTION_VIEW, uri);
         view.addCategory(Intent.CATEGORY_BROWSABLE);

@@ -107,9 +107,9 @@ function endSummaryHTML(a) {
       const inCards = !!cardFor(x.term);
       const m = lookedMeaning(x);
       return `<li><label><input type="checkbox" data-sum="${i}" ${inCards ? 'disabled' : 'checked'}>
-        <span class="sum-t">${esc(x.term)}</span>${m ? ` <span class="sub">— ${esc(m)}</span>` : ''}${inCards ? ' <span class="sub">✓ kartlarında</span>' : ''}</label></li>`;
+        <span class="sum-t">${esc(x.term)}</span>${m ? ` <span class="sub">— ${esc(m)}</span>` : ''}${inCards ? ` <span class="sub in-cards">${icon('check', 13)}kartlarında</span>` : ''}</label></li>`;
     }).join('')}</ul>
-    ${fresh.length ? `<button class="primary" id="sumAdd">Seçilenleri karta ekle (${fresh.length})</button>` : '<div class="sub">Hepsi kartlarında. 👍</div>'}`;
+    ${fresh.length ? `<button class="primary" id="sumAdd">Seçilenleri karta ekle (${fresh.length})</button>` : '<div class="sub">Hepsi kartlarında.</div>'}`;
 }
 function updateEndSummary() {
   const box = $('#rSum');
@@ -124,8 +124,8 @@ async function addLookedToCards() {
     if (cardFor(x.term)) continue;
     const ai = rd.cache.get(x.term.toLowerCase() + '|' + x.sentence) || aiCacheGet(x.term.toLowerCase() + '|' + x.sentence) || null;
     await saveCard({
-      id: uid(), term: x.term, context: x.sentence, source: a.url, tweet: null,
-      article: { id: a.id, title: a.title, site: a.site },
+      id: uid(), term: x.term, context: x.sentence, source: a.url, tweet: a.tweet || null,
+      article: a.tweet ? null : { id: a.id, title: a.title, site: a.site },
       createdAt: now(), status: ai ? 'ready' : 'pending', ai, error: null, seen: 1, srs: SRS.fresh()
     });
     n++;

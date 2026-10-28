@@ -9,6 +9,32 @@ const DAY = 86400000;
 const now = () => Date.now();
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : String(now()) + Math.random().toString(16).slice(2));
 
+/* ---------- ortak ekran şablonları (tasarım dili) ----------
+   Boş ekran: ikon + başlık + tek cümle + en fazla bir eylem.
+   Hata ekranı: başlık + neden + ana eylem + ikincil eylemler + katlanır teknik ayrıntı. */
+function emptyHTML({ ico = 'inbox', title = '', text = '', action = '' }) {
+  return `<div class="empty">${icon(ico, 32, 'empty-ico')}
+    ${title ? `<div class="empty-t">${title}</div>` : ''}${text ? `<p>${text}</p>` : ''}${action}</div>`;
+}
+// eylem: { label, ico, id | href, primary }
+function actionHTML(a, cls = '') {
+  const inner = (a.ico ? icon(a.ico, 18) : '') + `<span>${esc(a.label)}</span>`;
+  const c = (a.primary ? 'primary' : 'ghost') + ' act' + (cls ? ' ' + cls : '');
+  return a.href
+    ? `<a class="${c}" href="${esc(a.href)}"${/^https?:/.test(a.href) ? ' target="_blank" rel="noopener"' : ''}${a.id ? ` id="${a.id}"` : ''}>${inner}</a>`
+    : `<button class="${c}"${a.id ? ` id="${a.id}"` : ''}>${inner}</button>`;
+}
+function failHTML({ title, text = '', steps = [], primary = null, secondary = [], details = '', note = '' }) {
+  return `<div class="fail">
+    <div class="fail-t">${icon('warn', 20)}<span>${title}</span></div>
+    ${text ? `<p>${text}</p>` : ''}
+    ${steps.length ? `<ol class="steps">${steps.map((x) => `<li>${x}</li>`).join('')}</ol>` : ''}
+    <div class="fail-acts">${primary ? actionHTML(primary, 'wide') : ''}${secondary.length ? `<div class="pair">${secondary.map((x) => actionHTML(x)).join('')}</div>` : ''}</div>
+    ${note ? `<p class="sub">${note}</p>` : ''}
+    ${details ? `<details class="tech"><summary>Teknik ayrıntı</summary><div>${esc(details)}</div></details>` : ''}
+  </div>`;
+}
+
 function toast(msg, ms = 2200) {
   const t = $('#toast');
   t.textContent = msg;
@@ -42,6 +68,46 @@ const settings = {
   get closeAfterSave() { return store.get('closeAfterSave', true); },
   get autoSpeak() { return store.get('autoSpeak', false); }
 };
+
+/* ---------- servis kaydı ----------
+   Dış servislerin (Jina, tweet, Reddit, Gemini…) son 7 gündeki başarı/hata durumu.
+   Ayarlar → Bağlantılar'da görünür: bir şey bozulunca ekran görüntüsü beklemeden neyin bozulduğu belli olur. */
+const SVC_NAMES = {
+  telefon: 'Telefonda açma (Lens Seçim)', jina: 'Jina (sayfa metni)', 'jina-html': 'Jina (sayfa HTML)',
+  reddit: 'Reddit (doğrudan)', 'reddit-telefon': 'Reddit (Lens Seçim)', fxtwitter: 'fxtwitter (tweet)', vxtwitter: 'vxtwitter (tweet)',
+  oembed: 'X oEmbed (tweet)', gemini: 'Gemini (AI)', mymemory: 'MyMemory (temel çeviri)', dictionary: 'Free Dictionary (temel tanım)',
+  feed: 'Keşfet akışı'
+};
+function logSvc(name, ok, msg = '') {
+  try {
+    const log = store.get('svcLog', {});
+    const e = log[name] || { ok: 0, fails: [] };
+    const t = now();
+    if (ok) e.ok = t;
+    else e.fails.push({ at: t, msg: String(msg).slice(0, 120) });
+    e.fails = e.fails.filter((f) => t - f.at < 7 * DAY).slice(-20);
+    log[name] = e;
+    store.set('svcLog', log);
+  } catch {}
+}
+function svcLogHTML() {
+  const log = store.get('svcLog', {});
+  const t = now();
+  const rows = Object.entries(log)
+    .map(([k, e]) => ({ k, e, fails: e.fails.filter((f) => t - f.at < 7 * DAY) }))
+    .filter((r) => r.e.ok > t - 7 * DAY || r.fails.length)
+    .map((r) => ({ ...r, broken: r.fails.length && r.fails[r.fails.length - 1].at > (r.e.ok || 0) ? 1 : 0 }))
+    .sort((a, b) => b.broken - a.broken || b.fails.length - a.fails.length);
+  if (!rows.length) return '<div class="sub">Son 7 günde kayıt yok.</div>';
+  const ago = (x) => { const m = Math.round((t - x) / 60000); return m < 60 ? m + ' dk' : m < 1440 ? Math.round(m / 60) + ' sa' : Math.round(m / 1440) + ' gün'; };
+  return rows.map(({ k, e, fails }) => {
+    const last = fails[fails.length - 1];
+    const lastFailNewer = last && last.at > (e.ok || 0);
+    const st = !fails.length ? ['ok', 'ok'] : lastFailNewer ? ['fail', 'bad'] : ['warn', 'warn'];
+    return `<div class="svc">${icon(st[0], 18, 'st-' + st[1])}<div>${esc(SVC_NAMES[k] || k)} <span class="sub">${e.ok ? 'son başarı ' + ago(e.ok) + ' önce' : 'hiç başarılı olmadı'}${fails.length ? ` · ${fails.length} hata` : ''}</span>
+      ${last ? `<div class="sub svc-err">son hata ${ago(last.at)} önce: ${esc(last.msg)}</div>` : ''}</div></div>`;
+  }).join('');
+}
 
 /* ---------- IndexedDB ---------- */
 const DB = {
@@ -170,10 +236,12 @@ async function geminiJSON(prompt, temperature = 0.3) {
       const data = await res.json();
       const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
       store.set('lastModel', model);
+      logSvc('gemini', true);
       return JSON.parse(text.replace(/^```(?:json)?\s*|\s*```$/g, ''));
     }
     let err = {};
     try { err = (await res.json()).error || {}; } catch {}
+    logSvc('gemini', false, model + ': ' + (res.status === 429 ? 'kota doldu' : 'HTTP ' + res.status + ' ' + (err.message || '')));
     if (res.status === 429) {
       blocked[model] = now() + parseRetryMs(err);
       soonest = Math.min(soonest, blocked[model]);
@@ -223,28 +291,108 @@ async function askGemini(term, context) {
   return json;
 }
 
-let enriching = false;
+/* ---------- Gemini kotası dolunca: temel kart ----------
+   Türkçe anlam MyMemory'den (ücretsiz çeviri), İngilizce tanım/telaffuz/tür Free Dictionary'den.
+   Kart hemen tekrar edilebilir; kota açılınca kendiliğinden tam AI kartına yükseltilir (ai.basic). */
+const POS_TR = { noun: 'isim', verb: 'fiil', adjective: 'sıfat', adverb: 'zarf', pronoun: 'zamir', preposition: 'edat', conjunction: 'bağlaç', interjection: 'ünlem' };
+async function freeTranslate(text) {
+  const r = await fetchWithTimeout('https://api.mymemory.translated.net/get?langpair=en|tr&q=' + encodeURIComponent(text.slice(0, 450)), {}, 10000);
+  if (!r.ok) { logSvc('mymemory', false, 'HTTP ' + r.status); throw new Error('çeviri HTTP ' + r.status); }
+  const j = await r.json();
+  const t = String(j.responseData?.translatedText || '').trim();
+  if (!t || j.responseStatus !== 200 || /MYMEMORY WARNING|INVALID|QUERY LENGTH/i.test(t)) { logSvc('mymemory', false, t.slice(0, 80) || 'boş'); throw new Error('çeviri kotası/hata'); }
+  logSvc('mymemory', true);
+  return t;
+}
+async function freeDefine(word) {
+  const r = await fetchWithTimeout('https://api.dictionaryapi.dev/api/v2/entries/en/' + encodeURIComponent(word), {}, 10000);
+  if (!r.ok) { if (r.status !== 404) logSvc('dictionary', false, 'HTTP ' + r.status); return null; } // 404 = sözlükte yok, hata değil
+  logSvc('dictionary', true);
+  const e = (await r.json())[0];
+  if (!e) return null;
+  const m = e.meanings?.[0];
+  const d = m?.definitions?.[0];
+  return {
+    ipa: e.phonetic || e.phonetics?.find((p) => p.text)?.text || '',
+    pos: POS_TR[m?.partOfSpeech] || m?.partOfSpeech || '',
+    def: d?.definition || '',
+    example: d?.example || '',
+    synonyms: (m?.synonyms || []).slice(0, 3)
+  };
+}
+async function basicAI(term, context) {
+  const single = !/\s/.test(term.trim());
+  const lemma = single ? (lemmaCandidates(term.toLowerCase()).find((k) => oxLookup(k)) || term.toLowerCase()) : term;
+  const [mean, def, ctx] = await Promise.all([
+    freeTranslate(term).catch(() => ''),
+    single ? freeDefine(lemma).catch(() => null) : Promise.resolve(null),
+    context && context !== term && context.length < 450 ? freeTranslate(context).catch(() => '') : Promise.resolve('')
+  ]);
+  if (!mean && !def) throw new Error('temel kaynaklara ulaşılamadı');
+  return {
+    basic: true,
+    type: single ? 'word' : term.split(/\s+/).length > 6 ? 'sentence' : 'phrase',
+    term: single ? lemma : term,
+    ipa: def?.ipa || '',
+    pos: def?.pos || '',
+    meaning_tr: mean || '—',
+    explanation_tr: (def?.def ? 'İngilizce tanım: ' + def.def + ' ' : '') + '(Temel kart — AI kotası açılınca otomatik zenginleşir.)',
+    context_tr: ctx,
+    examples: def?.example ? [{ en: def.example, tr: '' }] : [],
+    synonyms: def?.synonyms || [],
+    key_phrases: []
+  };
+}
+
+let enriching = false, enrichTimer = null;
 async function enrichPending() {
   if (enriching || !navigator.onLine || !settings.apiKey) return;
   enriching = true;
+  let quotaUntil = 0;
   try {
-    for (const c of cards.filter((x) => x.status === 'pending')) {
-      try {
-        c.ai = await askGemini(c.term, c.context);
-        c.status = 'ready';
-        c.error = null;
-      } catch (e) {
-        c.error = friendlyGeminiError(e);
-        if (e.kind === 'quota' || e.kind === 'nokey' || e.kind === 'badkey') { await saveCard(c); break; }
+    // önce hiç anlamı olmayanlar, sonra temel kartların yükseltilmesi
+    const queue = [...cards.filter((x) => x.status === 'pending'), ...cards.filter((x) => x.status === 'ready' && x.ai?.basic)];
+    for (const c of queue) {
+      const wasBasic = !!c.ai?.basic;
+      if (quotaUntil && wasBasic) break; // kota dolu: yükseltmeyi sonraya bırak
+      if (!quotaUntil) {
+        try {
+          c.ai = await askGemini(c.term, c.context);
+          c.status = 'ready';
+          c.error = null;
+          await saveCard(c);
+          refreshUI();
+          continue;
+        } catch (e) {
+          c.error = friendlyGeminiError(e);
+          if (e.kind === 'nokey' || e.kind === 'badkey') { await saveCard(c); break; }
+          if (e.kind === 'quota') quotaUntil = e.until || now() + 3600e3;
+          else if (wasBasic) { await saveCard(c); continue; }
+        }
+      }
+      // AI yok: kart beklemede kalmasın, temel kartla hemen tekrar edilebilsin
+      if (!wasBasic) {
+        try {
+          c.ai = await basicAI(c.term, c.context);
+          c.status = 'ready';
+        } catch {}
       }
       await saveCard(c);
-      refreshBadges();
-      if (currentView === 'review' && !reviewState.card) renderReview();
-      if (currentView === 'list') renderList();
+      refreshUI();
     }
   } finally {
     enriching = false;
   }
+  // kota açılınca (uygulama açıksa) kendiliğinden tekrar dene
+  if (quotaUntil) {
+    clearTimeout(enrichTimer);
+    enrichTimer = setTimeout(enrichPending, Math.min(Math.max(quotaUntil - now(), 60e3) + 5e3, 6 * 3600e3));
+  }
+}
+function refreshUI() {
+  refreshBadges();
+  if (currentView === 'review' && !reviewState.card) renderReview();
+  if (currentView === 'list') renderList();
 }
 
 /* ---------- metin hazırlama ---------- */
@@ -294,16 +442,27 @@ let currentView = 'review';
 const TITLES = { review: 'Tekrar', read: 'Oku', add: 'Ekle', list: 'Kartlar', settings: 'Ayarlar', reader: '' };
 function show(view) {
   currentView = view;
+  $('#clipBanner').hidden = true; // pano önerisi yalnızca göründüğü ekranda kalır
   $$('.view').forEach((v) => (v.hidden = v.id !== 'view-' + view));
   $$('.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
   $('#title').textContent = TITLES[view];
   document.body.classList.toggle('reading', view === 'reader');
   if (view !== 'reader' && typeof closeSheet === 'function') { closeSheet(); stopReadAloud(); }
-  if (view === 'read') { renderDiscover(); renderLibrary().then(drawDiscList); }
+  if (view === 'read') { setReadPane(readReturn || 'lib'); readReturn = null; renderDiscover(); renderLibrary().then(drawDiscList); }
   if (view === 'review') renderReview();
   if (view === 'list') renderList();
-  if (view === 'settings') { renderSettings(); renderSourceSettings(); }
+  if (view === 'settings') { renderSettings(); renderSourceSettings(); renderSvcLog(); }
   if (view === 'add') renderTokens();
+}
+
+// Oku ekranı: Kütüphanem / Keşfet. Keşfet'ten açılan yazıdan geri dönünce Keşfet'te kalınır.
+let readReturn = null;
+function setReadPane(p) {
+  $('#paneLib').hidden = p !== 'lib';
+  $('#paneDisc').hidden = p !== 'disc';
+  $('#paneLibBtn').setAttribute('aria-selected', p === 'lib');
+  $('#paneDiscBtn').setAttribute('aria-selected', p === 'disc');
+  if (p === 'disc') markDiscSeen();
 }
 
 function dueCards() {
@@ -328,14 +487,21 @@ function renderTokens() {
     ? `<span class="w${addState.selected.has(i) ? ' on' : ''}" data-i="${i}">${esc(t.raw)}</span>`
     : esc(t.raw))).join('');
   const hasWords = addState.tokens.some((t) => t.word);
+  // metin bir kez görünür: yazarken kutu, sonra dokunulabilir kelimeler ("Düzenle" kutuyu geri açar)
+  const editing = !hasWords || addState.editing;
   const box = $('#tokens');
-  box.innerHTML = !hasWords ? '' : addState.tweet
-    ? tweetHTML(addState.tweet, body)
-    : `<div class="plainpost">${body}</div>`;
-  // tweet varsa ham metin kutusu gizli; "Metni düzenle" ile açılır
-  $('#addText').hidden = !!addState.tweet && !addState.editing;
-  $('#editTextBtn').hidden = !addState.tweet;
-  $('#targetPreview').textContent = currentTarget() || '—';
+  box.hidden = editing;
+  box.innerHTML = editing ? '' : addState.tweet ? tweetHTML(addState.tweet, body) : `<div class="plainpost">${body}</div>`;
+  $('#addText').hidden = !editing;
+  $('#editTextBtn').hidden = editing;
+  $('#clearSelBtn').hidden = !addState.selected.size;
+  $('#addHint').textContent = editing
+    ? 'İngilizce bir kelime, kalıp ya da cümle yaz veya yapıştır.'
+    : 'Öğrenmek istediğin kelimeye dokun. Kalıp için ilk ve son kelimesine dokun.';
+  const tgt = $('#targetPreview');
+  if (addState.selected.size) { tgt.textContent = currentTarget(); tgt.classList.remove('all'); }
+  else { tgt.textContent = hasWords ? `Tüm metin · ${wordCount(text)} kelime` : '—'; tgt.classList.add('all'); }
+  $('#saveBtn').textContent = addState.selected.size || !hasWords ? 'Kaydet' : 'Tüm metni kaydet';
   $('#toReaderBtn').hidden = !!addState.tweet || wordCount(text) < 60;
 }
 function currentTarget() {
@@ -367,7 +533,7 @@ function tweetHTML(t, bodyHTML) {
     </header>
     <div class="tw-text">${bodyHTML}</div>
     ${photos.length ? `<div class="tw-media n${photos.length}">${photos.map((u) => `<img src="${esc(u)}" alt="" referrerpolicy="no-referrer" loading="lazy" onerror="this.remove()">`).join('')}</div>` : ''}
-    <footer class="tw-foot">${esc(tweetDate(t.date))}${t.url ? ` · <a href="${esc(t.url)}" target="_blank" rel="noopener">X'te aç ↗</a>` : ''}</footer>
+    <footer class="tw-foot">${esc(tweetDate(t.date))}${t.url ? ` · <a href="${esc(t.url)}" target="_blank" rel="noopener">X'te aç ${icon('external', 14)}</a>` : ''}</footer>
   </article>`;
 }
 
@@ -387,6 +553,7 @@ async function onSave() {
       id: uid(), term, context, source: addState.source || '', tweet: addState.tweet || null,
       createdAt: now(), status: 'pending', ai: null, error: null, seen: 1, srs: SRS.fresh()
     };
+    store.set('lastClip', cleanShared(text || term)); // az önce kaydedilen metni panodan tekrar önerme
     await saveCard(card);
     toast(settings.apiKey ? 'Kaydedildi, kart hazırlanıyor…' : 'Kaydedildi. Kart için Ayarlar’a API anahtarı ekle');
   }
@@ -423,6 +590,7 @@ function renderReview() {
   const due = dueCards();
   const pending = cards.filter((c) => c.status === 'pending').length;
   const learned = cards.filter((c) => c.srs.interval >= 21).length;
+  $('#reviewStats').hidden = !cards.length; // hiç kart yokken sıfırlarla dolu kutular gösterme
   $('#reviewStats').innerHTML = `
     <div class="stat"><b>${due.length}</b><span>bugün</span></div>
     <div class="stat"><b>${cards.length}</b><span>toplam</span></div>
@@ -437,11 +605,11 @@ function renderReview() {
   const c = reviewState.card;
   if (!c) {
     const next = cards.filter((x) => x.status === 'ready').sort((a, b) => a.srs.due - b.srs.due)[0];
-    area.innerHTML = `<div class="empty"><span class="big-ico">✓</span>
-      ${cards.length ? 'Şimdilik tekrar edecek kart yok.' : 'Henüz kart yok. X’te ya da tarayıcıda bir metni seç → Paylaş → <b>Lens</b>.'}
-      ${next ? `<p class="sub">Sıradaki: ${esc(fmtDue(next.srs.due))}</p>` : ''}
-      ${pending ? `<p class="sub">${pending} kart AI’dan bekliyor${settings.apiKey ? '' : ' (API anahtarı yok)'}.</p>` : ''}
-    </div>`;
+    area.innerHTML = cards.length
+      ? emptyHTML({ ico: 'done', title: 'Şimdilik bu kadar', text: (next ? `Sıradaki kart ${esc(fmtDue(next.srs.due))}.` : 'Tekrar edecek kart yok.') +
+          (pending ? ` ${pending} kart AI’dan bekliyor${settings.apiKey ? '' : ' (API anahtarı yok)'}.` : '') })
+      : emptyHTML({ ico: 'cards', title: 'Henüz kart yok', text: 'X’te ya da tarayıcıda bir metni seç → Paylaş → <b>Lens</b>. Kaydettiğin kelimeler burada tekrar için sıraya girer.',
+          action: actionHTML({ label: 'Metin ekle', ico: 'plus', id: 'emptyAdd' }) });
     return;
   }
 
@@ -450,26 +618,26 @@ function renderReview() {
   const front = c.tweet
     ? `<div class="mode">${reviewState.mode === 'cloze' ? 'Boşluğu doldur' : esc(typeLabel(a.type))}</div>
        ${reviewState.mode === 'card' && !wholeTweet ? `<div class="term${c.term.length > 60 ? ' long' : ''}"><div>${esc(c.term)}${a.ipa ? `<span class="ipa">${esc(a.ipa)}</span>` : ''}</div>
-         <button class="speak" data-speak="${esc(c.term)}" aria-label="Sesli oku">🔊</button></div>` : ''}
+         <button class="speak" data-speak="${esc(c.term)}" aria-label="Sesli oku">${icon('speak', 18)}</button></div>` : ''}
        ${tweetHTML(c.tweet, highlight(c.tweet.text, c.term, reviewState.mode === 'cloze'))}
        ${reviewState.mode === 'cloze' ? `<div class="sub">İpucu: ${esc(a.meaning_tr)}</div>` : ''}
-       ${wholeTweet ? `<button class="speak" data-speak="${esc(c.term)}">🔊 Dinle</button>` : ''}`
+       ${wholeTweet ? `<button class="speak with-label" data-speak="${esc(c.term)}">${icon('speak', 18)}<span>Dinle</span></button>` : ''}`
     : reviewState.mode === 'cloze'
     ? `<div class="mode">Boşluğu doldur</div>
        <div class="ctx">${highlight(c.context, c.term, true)}</div>
        <div class="sub">İpucu: ${esc(a.meaning_tr)}</div>`
     : `<div class="mode">${esc(typeLabel(a.type))}</div>
        <div class="term${c.term.length > 60 ? ' long' : ''}"><div>${esc(c.term)}${a.ipa ? `<span class="ipa">${esc(a.ipa)}</span>` : ''}</div>
-         <button class="speak" data-speak="${esc(c.term)}" aria-label="Sesli oku">🔊</button></div>
+         <button class="speak" data-speak="${esc(c.term)}" aria-label="Sesli oku">${icon('speak', 18)}</button></div>
        ${c.context && c.context !== c.term ? `<div class="ctx">${highlight(c.context, c.term)}</div>` : ''}`;
 
   const back = reviewState.revealed ? `
     ${reviewState.mode === 'cloze' ? `<div class="term${c.term.length > 60 ? ' long' : ''}"><div>${esc(c.term)}${a.ipa ? `<span class="ipa">${esc(a.ipa)}</span>` : ''}</div>
-      <button class="speak" data-speak="${esc(c.context)}">🔊</button></div>` : ''}
+      <button class="speak" data-speak="${esc(c.context)}" aria-label="Sesli oku">${icon('speak', 18)}</button></div>` : ''}
     ${detailHTML(c)}
     <div class="grades">
       ${['Bilmedim', 'Zor', 'İyi', 'Kolay'].map((l, g) => `<button class="g${g}" data-grade="${g}">${l}<small>${SRS.label(c.srs, g)}</small></button>`).join('')}
-    </div>` : `<button id="revealBtn" class="primary big">Göster</button>`;
+    </div>` : `<button id="revealBtn" class="primary block-btn">Göster</button>`;
 
   area.innerHTML = `<div class="card">${front}${back}</div>`;
   if (settings.autoSpeak && !reviewState.revealed && reviewState.mode === 'card') speak(c.term);
@@ -485,9 +653,9 @@ function detailHTML(c) {
     ${a.context_tr && c.context !== c.term ? `<div class="block"><div class="sub">Gördüğün yerde:</div><p>${esc(a.context_tr)}</p></div>` : ''}
     ${(a.key_phrases || []).length ? `<div class="block"><div class="sub">Öne çıkanlar</div>${a.key_phrases.map((k) => `<p><b>${esc(k.en)}</b> — ${esc(k.tr)}</p>`).join('')}</div>` : ''}
     ${(a.examples || []).length ? `<div class="block"><div class="sub">Örnekler</div>${a.examples.map((x) =>
-      `<div class="ex"><div>${esc(x.en)} <button class="speak" data-speak="${esc(x.en)}">🔊</button></div><div class="tr">${esc(x.tr)}</div></div>`).join('')}</div>` : ''}
+      `<div class="ex"><div>${esc(x.en)} <button class="speak" data-speak="${esc(x.en)}" aria-label="Sesli oku">${icon('speak', 16)}</button></div><div class="tr">${esc(x.tr)}</div></div>`).join('')}</div>` : ''}
     ${(a.synonyms || []).length ? `<div class="chips">${a.synonyms.map((s) => `<span class="chip">${esc(s)}</span>`).join('')}</div>` : ''}
-    ${c.source ? `<a class="sub" href="${esc(c.source)}" target="_blank" rel="noopener">${c.article ? '📰 ' + esc(c.article.title) + ' — ' + esc(c.article.site) : 'Kaynağa git'} ↗</a>` : ''}`;
+    ${c.source ? `<a class="sub" href="${esc(c.source)}" target="_blank" rel="noopener">${c.article ? icon('article', 16) + ' ' + esc(c.article.title) + ' · ' + esc(c.article.site) : 'Kaynağa git'} ${icon('external', 14)}</a>` : ''}`;
 }
 
 function typeLabel(t) {
@@ -523,25 +691,29 @@ function renderList() {
   const bar = $('#pendingBar');
   bar.hidden = !pending.length;
   bar.innerHTML = pending.length
-    ? `<span>${pending.length} kart AI bekliyor${pending[0].error ? ` — ${esc(pending[0].error).slice(0, 80)}` : ''}</span><button class="ghost" id="retryBtn">Tekrar dene</button>`
+    ? `<span>${pending.length} kart AI bekliyor${pending[0].error ? ` · ${esc(pending[0].error).slice(0, 80)}` : ''}</span><button class="ghost sm" id="retryBtn">Tekrar dene</button>`
     : '';
   $('#cardList').innerHTML = list.length ? list.map((c) => `
     <li class="item" data-id="${c.id}">
       <div class="head" data-toggle="${c.id}">
         <div><div class="t">${esc(c.term)}</div>
-          <div class="m">${c.status === 'ready' ? esc(c.ai.meaning_tr) : '<span class="tag-pending">AI bekliyor</span>'}</div></div>
+          <div class="m">${c.status === 'ready' ? esc(c.ai.meaning_tr) + (c.ai.basic ? ' <span class="tag-pending">temel</span>' : '') : '<span class="tag-pending">AI bekliyor</span>'}</div></div>
         <div class="due">${c.status === 'ready' ? esc(fmtDue(c.srs.due)) : ''}</div>
       </div>
       <div class="detail" ${openItems.has(c.id) ? '' : 'hidden'}>
         ${c.tweet ? tweetHTML(c.tweet, highlight(c.tweet.text, c.term)) : c.context && c.context !== c.term ? `<div class="ctx">${highlight(c.context, c.term)}</div>` : ''}
         ${c.status === 'ready' ? detailHTML(c) : ''}
-        <div class="row">
-          <button class="ghost" data-act="now" data-id="${c.id}">Şimdi tekrar et</button>
-          <button class="ghost" data-act="regen" data-id="${c.id}">AI’yı yenile</button>
-          <button class="ghost" data-act="del" data-id="${c.id}">Sil</button>
+        <div class="item-acts">
+          <div class="pair">
+            <button class="ghost act" data-act="now" data-id="${c.id}">${icon('review', 18)}<span>Şimdi tekrar et</span></button>
+            <button class="ghost act" data-act="regen" data-id="${c.id}">${icon('sparkle', 18)}<span>AI’yı yenile</span></button>
+          </div>
+          <button class="danger-link" data-act="del" data-id="${c.id}">${icon('trash', 16)}<span>Kartı sil</span></button>
         </div>
       </div>
-    </li>`).join('') : `<div class="empty">${q ? 'Eşleşen kart yok.' : 'Henüz kart yok.'}</div>`;
+    </li>`).join('') : q
+    ? emptyHTML({ ico: 'cards', title: 'Eşleşen kart yok', text: `“${esc(q)}” hiçbir kartta geçmiyor.` })
+    : emptyHTML({ ico: 'cards', title: 'Henüz kart yok', text: 'Kaydettiğin kelime ve kalıplar burada listelenir.', action: actionHTML({ label: 'Metin ekle', ico: 'plus', id: 'emptyAdd' }) });
 }
 
 /* ----- Ayarlar ----- */
@@ -558,8 +730,11 @@ function renderSettings() {
 /* ---------- olaylar ---------- */
 function bind() {
   $$('.tabs button').forEach((b) => b.addEventListener('click', () => show(b.dataset.view)));
+  $$('.seg-tabs [data-pane]').forEach((b) => b.addEventListener('click', () => { setReadPane(b.dataset.pane); window.scrollTo(0, 0); }));
 
-  $('#addText').addEventListener('input', () => { addState.selected.clear(); renderTokens(); });
+  $('#addText').addEventListener('input', () => { addState.selected.clear(); addState.editing = true; renderTokens(); });
+  // yazma bitince (kutudan çıkınca) dokunulabilir kelimelere geç
+  $('#addText').addEventListener('blur', () => { setTimeout(() => { if (addState.editing && $('#addText').value.trim()) { addState.editing = false; renderTokens(); } }, 150); });
   $('#tokens').addEventListener('click', (e) => {
     const b = e.target.closest('.w');
     if (!b) return;
@@ -568,9 +743,14 @@ function bind() {
     renderTokens();
   });
   $('#editTextBtn').addEventListener('click', () => {
-    addState.editing = !addState.editing;
+    addState.editing = true;
     renderTokens();
-    if (addState.editing) $('#addText').focus();
+    $('#addText').focus();
+  });
+  // boş ekranlardaki "Metin ekle"
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('#emptyAdd')) show('add');
+    if (e.target.closest('#emptyDisc')) setReadPane('disc');
   });
   $('#addText').addEventListener('change', () => {
     // metin elle değiştiyse artık birebir tweet değil
@@ -653,21 +833,19 @@ function bind() {
     }
   });
 
-  $('#saveSettings').addEventListener('click', () => {
-    store.set('apiKey', $('#apiKey').value.trim());
-    store.set('model', $('#model').value.trim() || 'gemini-2.5-flash-lite');
-    store.set('closeAfterSave', $('#closeAfterSave').checked);
-    store.set('autoSpeak', $('#autoSpeak').checked);
-    toast('Kaydedildi');
-    enrichPending();
-  });
+  // ayarlar ayrı bir "Kaydet" düğmesi olmadan, değiştikleri anda kaydedilir
+  const saveField = (id, fn) => $(id).addEventListener('change', () => { fn(); toast('Kaydedildi'); });
+  saveField('#apiKey', () => { store.set('apiKey', $('#apiKey').value.trim()); enrichPending(); });
+  saveField('#model', () => store.set('model', $('#model').value.trim() || 'gemini-2.5-flash-lite'));
+  saveField('#closeAfterSave', () => store.set('closeAfterSave', $('#closeAfterSave').checked));
+  saveField('#autoSpeak', () => store.set('autoSpeak', $('#autoSpeak').checked));
   $('#testKey').addEventListener('click', async () => {
     store.set('apiKey', $('#apiKey').value.trim());
     store.set('model', $('#model').value.trim() || 'gemini-2.5-flash-lite');
     toast('Test ediliyor…', 5000);
     try {
       const r = await askGemini('give up', 'Never give up on your side project.');
-      toast('Çalışıyor ✓ (' + store.get('lastModel', '') + ') "give up" = ' + r.meaning_tr, 4000);
+      toast('Anahtar çalışıyor (' + store.get('lastModel', '') + '): "give up" = ' + r.meaning_tr, 4000);
     } catch (e) {
       toast(friendlyGeminiError(e), 6000);
     }
@@ -784,10 +962,13 @@ async function getTweetText(tweetUrl, id) {
     try {
       const tw = await fn();
       const txt = cleanShared(tw?.text);
-      if (txt) return { text: txt, tweet: { ...tw, text: txt }, errs };
+      if (txt) { logSvc(name, true); return { text: txt, tweet: { ...tw, text: txt }, errs }; }
       errs.push(name + ': boş');
+      logSvc(name, false, 'boş yanıt');
     } catch (e) {
-      errs.push(name + ': ' + (e.name === 'AbortError' ? 'zaman aşımı' : e.message || 'erişilemedi (CORS/ağ)'));
+      const m = e.name === 'AbortError' ? 'zaman aşımı' : e.message || 'erişilemedi (CORS/ağ)';
+      errs.push(name + ': ' + m);
+      logSvc(name, false, m);
     }
   }
   return { text: '', errs };
@@ -797,7 +978,7 @@ async function loadTweetText(tweetUrl, id) {
   const diag = $('#diag');
   ta.placeholder = 'Tweet metni getiriliyor…';
   diag.hidden = false;
-  diag.innerHTML = 'Tweet metni getiriliyor…';
+  diag.innerHTML = '<div class="loading-line"><span class="spinner sm"></span>Tweet metni getiriliyor…</div>';
   const { text, tweet, errs } = await getTweetText(tweetUrl, id);
   ta.placeholder = 'İngilizce kelime, kalıp ya da cümle…';
   if (text) {
@@ -809,8 +990,8 @@ async function loadTweetText(tweetUrl, id) {
       renderTokens();
     }
   } else {
-    diag.innerHTML = `Tweet metni alınamadı.<br><small>${esc(errs.join(' · '))}</small><br>
-      <button class="ghost" id="retryTweet">Tekrar dene</button> <button class="ghost" id="pasteInstead">Panodan yapıştır</button>`;
+    diag.innerHTML = failHTML({ title: 'Tweet metni alınamadı', text: 'Tweet’i X’te açıp metni kopyalayabilir, sonra buraya yapıştırabilirsin.',
+      secondary: [{ label: 'Tekrar dene', ico: 'refresh', id: 'retryTweet' }, { label: 'Yapıştır', ico: 'paste', id: 'pasteInstead' }], details: errs.join(' · ') });
     $('#retryTweet').onclick = () => loadTweetText(tweetUrl, id);
     $('#pasteInstead').onclick = pasteFromClipboard;
   }
@@ -827,6 +1008,9 @@ async function checkClipboard() {
     if (perm && perm.state !== 'granted') return;
     const t = cleanShared(await navigator.clipboard.readText());
     if (!t || t.length > 1500 || !/[A-Za-z]{2}/.test(t) || t === store.get('lastClip', '')) return;
+    const n = normalizeText(t).toLowerCase();
+    if (cards.some((c) => normalizeText(c.term).toLowerCase() === n || normalizeText(c.context || '').toLowerCase() === n)) { store.set('lastClip', t); return; }
+    store.set('lastClip', t); // her metin yalnızca bir kez önerilir
     banner.querySelector('span').textContent = t.length > 80 ? t.slice(0, 80) + '…' : t;
     banner.dataset.text = t;
     banner.hidden = false;
@@ -841,18 +1025,20 @@ async function runNetTest() {
     ['Jina (web sayfası metni)', () => fetch('https://r.jina.ai/' + T, { headers: { Accept: 'application/json' } }).then((r) => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))).then((j) => /Example Domain/.test(JSON.stringify(j)))],
     ['fxtwitter (tweet metni)', () => fetch('https://api.fxtwitter.com/status/20').then((r) => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status))).then((j) => !!j.tweet)]
   ];
-  box.innerHTML = tests.map(([n]) => `<div>⏳ ${esc(n)}</div>`).join('');
+  box.innerHTML = tests.map(([n]) => `<div class="svc"><span class="dot-wait"></span><div>${esc(n)}</div></div>`).join('');
   const res = await Promise.all(tests.map(async ([n, fn]) => {
     const t0 = performance.now();
     try {
       const ok = await withTimeout(fn(), 15000);
-      return `<div>${ok ? '✅' : '⚠️'} ${esc(n)} <span class="sub">${Math.round(performance.now() - t0)} ms${ok ? '' : ' · beklenmeyen yanıt'}</span></div>`;
+      return `<div class="svc">${icon(ok ? 'ok' : 'warn', 18, ok ? 'st-ok' : 'st-warn')}<div>${esc(n)} <span class="sub">${Math.round(performance.now() - t0)} ms${ok ? '' : ' · beklenmeyen yanıt'}</span></div></div>`;
     } catch (e) {
-      return `<div>❌ ${esc(n)} <span class="sub">${esc(e.message || 'erişilemedi')}</span></div>`;
+      return `<div class="svc">${icon('fail', 18, 'st-bad')}<div>${esc(n)} <span class="sub">${esc(e.message || 'erişilemedi')}</span></div></div>`;
     }
   }));
   box.innerHTML = res.join('');
+  renderSvcLog();
 }
+function renderSvcLog() { const el = $('#svcLog'); if (el) el.innerHTML = svcLogHTML(); }
 
 /* ---------- paylaşımdan gelen veri ---------- */
 function handleLaunchParams() {
@@ -860,12 +1046,23 @@ function handleLaunchParams() {
   const text = p.get('text') || '';
   const title = p.get('title') || '';
   const url = p.get('url') || '';
-  // Lens Seçim (Android) Reddit gönderisini telefondan çekip veri olarak gönderdi
-  const reddit = p.get('reddit');
-  if (p.get('rerr')) window.launchErr = p.get('rerr'); // Lens Seçim'in hata nedeni (Teknik ayrıntı'da gösterilir)
+  // Lens Seçim (Android) sayfayı/gönderiyi telefonda açıp veriyi adresin # kısmında gönderir
+  // (# kısmı sunucuya gitmez, uzun yazılar adres sınırına takılmaz)
+  const h = new URLSearchParams(location.hash.slice(1));
+  const reddit = h.get('reddit') || p.get('reddit');
+  const page = h.get('page');
+  const perr = h.get('perr') || p.get('rerr');
+  if (perr) window.launchErr = perr; // Lens Seçim'in hata nedeni (Teknik ayrıntı'da gösterilir)
   if (reddit) {
     history.replaceState(null, '', location.pathname);
     importRedditData(reddit, url);
+    return;
+  }
+  if (page && url) {
+    history.replaceState(null, '', location.pathname);
+    let data = null;
+    try { data = JSON.parse(page); } catch {}
+    importArticle(url, p.get('title') || '', { page: data });
     return;
   }
   const linkInText = (text.match(URL_RE) || [])[0] || '';
@@ -873,6 +1070,14 @@ function handleLaunchParams() {
   const source = url || linkInText;
   const tweetId = (source.match(/(?:x|twitter)\.com\/[^/]+\/status\/(\d+)/i) || [])[1];
   // Bir web sayfasının kendisi paylaşıldıysa (seçili metin yok, sadece link): okuyucuya aktar
+  // Sitenin kendi "Paylaş" düğmesi bağlantıya başlığı ya da ilk cümleyi ekler: kısa metin + düz sayfa bağlantısı da
+  // sayfa paylaşımıdır → okuyucu. (Seçilip paylaşılan metin ya bağlantısızdır ya da Chrome'un #:~:text= bağlantısını taşır.)
+  const pageShare = source && !tweetId && !/#:~:text=/.test(source) && wordCount(cleanShared(text)) < 60;
+  if (pageShare && cleanShared(text)) {
+    history.replaceState(null, '', location.pathname);
+    importArticle(source, cleanShared(title) || cleanShared(text).slice(0, 160));
+    return;
+  }
   if (!cleanShared(text) && source && !tweetId) {
     history.replaceState(null, '', location.pathname);
     importArticle(source, cleanShared(title));
@@ -886,6 +1091,12 @@ function handleLaunchParams() {
     return;
   }
 
+  // X'in paylaş düğmesi yalnızca bağlantı gönderir → tweet okuyucuda açılır (dokununca anlam, sözlük, çeviri)
+  if (!body && tweetId) {
+    history.replaceState(null, '', location.pathname);
+    openTweet(source, tweetId);
+    return;
+  }
   if (body || tweetId) {
     addState.fromShare = true;
     addState.source = source;
@@ -918,6 +1129,7 @@ function handleLaunchParams() {
 
 /* ---------- başlat ---------- */
 (async function init() {
+  hydrateIcons();
   bind();
   bindReader();
   bindDiscover();

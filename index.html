@@ -3,23 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#14161a">
+  <meta name="theme-color" content="#14161a" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6f4ee" media="(prefers-color-scheme: light)">
   <title>Lens Capture</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=30">
+  <link rel="stylesheet" href="styles.css?v=35">
 </head>
 <body>
   <header class="top">
     <h1 id="title">Tekrar</h1>
-    <span id="netBadge" class="badge" hidden>Offline</span>
+    <span id="netBadge" class="badge" hidden>Çevrimdışı</span>
   </header>
 
   <div id="clipBanner" class="clipbanner" hidden>
     <div><small>Panoda yeni metin</small><span></span></div>
-    <button id="clipAdd" class="primary">Ekle</button>
-    <button id="clipNo" class="ghost" aria-label="Kapat">✕</button>
+    <button id="clipAdd" class="primary sm">Ekle</button>
+    <button id="clipNo" class="icon-btn" aria-label="Kapat"><span data-icon="close"></span></button>
   </div>
 
   <main>
@@ -31,48 +32,54 @@
 
     <!-- EKLE / YAKALA -->
     <section id="view-add" class="view" hidden>
-      <p class="hint" id="addHint">Paylaşılan ya da yapıştırılan metin. Öğrenmek istediğin kelimelere metnin içinde dokun (kalıp için ilk ve son kelime); hiçbirini seçmezsen metnin tamamı kaydedilir.</p>
+      <p class="hint" id="addHint">İngilizce bir kelime, kalıp ya da cümle yaz veya yapıştır.</p>
       <textarea id="addText" rows="4" placeholder="İngilizce kelime, kalıp ya da cümle…"></textarea>
-      <div class="row">
-        <button id="pasteBtn" class="ghost">Panodan yapıştır</button>
-        <button id="clearSelBtn" class="ghost">Seçimi temizle</button>
-        <button id="editTextBtn" class="ghost" hidden>Metni düzenle</button>
-      </div>
       <div id="tokens"></div>
+      <div class="tools">
+        <button id="pasteBtn" class="tool"><span data-icon="paste" data-size="18"></span>Yapıştır</button>
+        <button id="editTextBtn" class="tool" hidden><span data-icon="edit" data-size="18"></span>Düzenle</button>
+        <button id="clearSelBtn" class="tool" hidden><span data-icon="close" data-size="18"></span>Temizle</button>
+      </div>
       <div class="target">
-        <span class="label">Öğrenilecek:</span>
+        <span class="label">Öğrenilecek</span>
         <strong id="targetPreview">—</strong>
       </div>
       <div id="sourceLine" class="source" hidden></div>
       <div id="diag" class="diag" hidden></div>
-      <button id="saveBtn" class="primary big">Kaydet</button>
-      <button id="toReaderBtn" class="ghost big" hidden>📖 Uzun metin — okuyucuda yazı olarak aç</button>
+      <button id="saveBtn" class="primary block-btn">Kaydet</button>
+      <button id="toReaderBtn" class="ghost block-btn" hidden><span data-icon="read" data-size="18"></span>Uzun metin: okuyucuda yazı olarak aç</button>
     </section>
 
     <!-- OKU (kütüphane) -->
     <section id="view-read" class="view" hidden>
-      <section class="discover">
-        <div class="disc-head"><h2>Keşfet</h2><span id="discAge" class="sub"></span><button id="discRefresh" class="r-btn" aria-label="Yenile">↻</button></div>
+      <!-- Oku her açılışta Kütüphanem ile başlar; Keşfet ayrı sekmede, yeni yazı sayısıyla -->
+      <div class="seg-tabs" role="tablist" aria-label="Oku">
+        <button role="tab" id="paneLibBtn" data-pane="lib" aria-selected="true">Kütüphanem</button>
+        <button role="tab" id="paneDiscBtn" data-pane="disc" aria-selected="false">Keşfet<span id="discNew" class="new-n" hidden></span></button>
+      </div>
+      <div id="paneLib" class="pane">
+        <div class="lib-add">
+          <input id="libUrl" type="url" inputmode="url" placeholder="Haber ya da yazı linki yapıştır…">
+          <button id="libGo" class="primary">Getir</button>
+        </div>
+        <ul id="libList" class="lib"></ul>
+        <p class="hint">Chrome'da bir sayfayı açıp ⋮ → Paylaş → <b>Lens</b> dediğinde de buraya gelir.</p>
+      </div>
+      <section id="paneDisc" class="pane discover" hidden>
+        <div class="sec-head"><span id="discAge" class="sub"></span><button id="discRefresh" class="icon-btn" aria-label="Yenile"><span data-icon="refresh"></span></button></div>
         <div id="discTabs" class="chipbar"></div>
         <ul id="discList" class="disc"></ul>
         <button id="discMore" class="ghost" hidden>Daha fazla</button>
       </section>
-      <h2>Kütüphanem</h2>
-      <div class="row lib-add">
-        <input id="libUrl" type="url" inputmode="url" placeholder="Haber ya da yazı linki yapıştır…">
-        <button id="libGo" class="primary">Getir</button>
-      </div>
-      <p class="hint">Chrome'da bir sayfayı açıp ⋮ → Paylaş → <b>Lens</b> dediğinde de buraya gelir.</p>
-      <ul id="libList" class="lib"></ul>
     </section>
 
     <!-- OKUYUCU -->
     <section id="view-reader" class="view" hidden>
       <div class="r-bar">
-        <button id="rBack" class="r-btn" aria-label="Geri">←</button>
+        <button id="rBack" class="r-btn" aria-label="Geri"><span data-icon="back" data-size="22"></span></button>
         <span id="readerSite" class="r-site"></span>
-        <button id="rAa" class="r-btn" aria-label="Yazı ayarları">Aa</button>
-        <button id="rListen" class="r-btn" aria-label="Sesli oku">🎧</button>
+        <button id="rAa" class="r-btn r-aa" aria-label="Yazı ayarları">Aa</button>
+        <button id="rListen" class="r-btn" aria-label="Sesli oku"><span data-icon="listen" data-size="22"></span></button>
         <div class="r-prog"><span id="rProgress"></span></div>
       </div>
       <div id="rPrefs" class="r-prefs" hidden></div>
@@ -86,63 +93,93 @@
       <ul id="cardList" class="list"></ul>
     </section>
 
-    <!-- AYARLAR -->
-    <section id="view-settings" class="view" hidden>
-      <label class="field">
-        <span>Gemini API anahtarı</span>
-        <input id="apiKey" type="password" autocomplete="off" placeholder="AIza…">
-        <small>aistudio.google.com → Get API key. Anahtar sadece bu telefonda saklanır.</small>
-      </label>
-      <label class="field">
-        <span>Model</span>
-        <input id="model" type="text" placeholder="gemini-2.5-flash-lite">
-        <small>Bu modelin kotası dolarsa diğer Gemini modellerine otomatik geçilir.</small>
-      </label>
-      <label class="toggle">
-        <input id="closeAfterSave" type="checkbox">
-        <span>Paylaşımdan kaydedince uygulamayı kapat</span>
-      </label>
-      <label class="toggle">
-        <input id="autoSpeak" type="checkbox">
-        <span>Kart açılınca sesli oku</span>
-      </label>
-      <button id="saveSettings" class="primary">Ayarları kaydet</button>
-      <button id="testKey" class="ghost">Anahtarı test et</button>
-
-      <h2>Keşfet kaynakları</h2>
-      <div id="srcSettings" class="srcset"></div>
-
-      <h2>Bağlantılar</h2>
-      <button id="netTest" class="ghost">Bağlantıları test et</button>
-      <div id="netResult" class="netres"></div>
-
-      <h2>Yedek</h2>
-      <div class="row">
-        <button id="exportBtn" class="ghost">Dışa aktar (JSON)</button>
-        <label class="ghost filebtn">İçe aktar<input id="importFile" type="file" accept="application/json" hidden></label>
+    <!-- AYARLAR (değişiklikler anında kaydedilir) -->
+    <section id="view-settings" class="view settings" hidden>
+      <div class="group">
+        <div class="sec-head"><h2>Yapay zekâ</h2></div>
+        <div class="panel">
+          <label class="field">
+            <span>Gemini API anahtarı</span>
+            <input id="apiKey" type="password" autocomplete="off" placeholder="AIza…">
+            <small>aistudio.google.com → Get API key. Anahtar sadece bu telefonda saklanır.</small>
+          </label>
+          <button id="testKey" class="ghost">Anahtarı test et</button>
+          <details class="more">
+            <summary>Gelişmiş</summary>
+            <label class="field">
+              <span>Model</span>
+              <input id="model" type="text" placeholder="gemini-2.5-flash-lite">
+              <small>Bu modelin kotası dolarsa diğer Gemini modellerine otomatik geçilir.</small>
+            </label>
+          </details>
+        </div>
       </div>
-      <div id="statsBox" class="statsbox"></div>
-      <p class="hint">Kartlar telefonun tarayıcı deposunda (IndexedDB) tutulur. Ara ara yedek almanı öneririm.</p>
+
+      <div class="group">
+        <div class="sec-head"><h2>Kaydetme ve tekrar</h2></div>
+        <div class="panel">
+          <label class="toggle">
+            <input id="closeAfterSave" type="checkbox">
+            <span>Paylaşımdan kaydedince uygulamayı kapat</span>
+          </label>
+          <label class="toggle">
+            <input id="autoSpeak" type="checkbox">
+            <span>Kart açılınca sesli oku</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="sec-head"><h2>Keşfet kaynakları</h2></div>
+        <details class="panel more" id="srcDetails">
+          <summary id="srcSummary">Kaynakları göster</summary>
+          <div id="srcSettings" class="srcset"></div>
+        </details>
+      </div>
+
+      <div class="group">
+        <div class="sec-head"><h2>Bağlantılar</h2></div>
+        <div class="panel">
+          <button id="netTest" class="ghost">Bağlantıları test et</button>
+          <div id="netResult" class="netres"></div>
+          <div class="sub-h">Son 7 gün</div>
+          <div id="svcLog" class="netres"></div>
+        </div>
+      </div>
+
+      <div class="group">
+        <div class="sec-head"><h2>Yedek</h2></div>
+        <div class="panel">
+          <div class="pair">
+            <button id="exportBtn" class="ghost">Dışa aktar</button>
+            <label class="ghost filebtn">İçe aktar<input id="importFile" type="file" accept="application/json" hidden></label>
+          </div>
+          <div id="statsBox" class="sub"></div>
+          <p class="hint">Kartlar telefonun tarayıcı deposunda tutulur. Ara ara yedek almanı öneririm.</p>
+        </div>
+      </div>
     </section>
   </main>
 
   <div id="sheet" class="sheet" hidden></div>
 
   <nav class="tabs">
-    <button data-view="review" class="active"><span class="ico">↻</span>Tekrar<b id="dueBadge" hidden></b></button>
-    <button data-view="read"><span class="ico">📖</span>Oku</button>
-    <button data-view="add"><span class="ico">＋</span>Ekle</button>
-    <button data-view="list"><span class="ico">☰</span>Kartlar</button>
-    <button data-view="settings"><span class="ico">⚙</span>Ayarlar</button>
+    <button data-view="review" class="active"><span class="ico" data-icon="review" data-size="22"></span>Tekrar<b id="dueBadge" hidden></b></button>
+    <button data-view="read"><span class="ico" data-icon="read" data-size="22"></span>Oku</button>
+    <button data-view="add"><span class="ico" data-icon="plus" data-size="22"></span>Ekle</button>
+    <button data-view="list"><span class="ico" data-icon="cards" data-size="22"></span>Kartlar</button>
+    <button data-view="settings"><span class="ico" data-icon="settings" data-size="22"></span>Ayarlar</button>
   </nav>
 
   <div id="toast" class="toast" hidden></div>
 
-  <script src="readability.js?v=30"></script>
-  <script src="reader.js?v=30"></script>
-  <script src="sources.js?v=30"></script>
-  <script src="reader-extras.js?v=30"></script>
-  <script src="discover.js?v=30"></script>
-  <script src="app.js?v=30"></script>
+  <script src="icons.js?v=35"></script>
+  <script src="readability.js?v=35"></script>
+  <script src="page-extract.js?v=35"></script>
+  <script src="reader.js?v=35"></script>
+  <script src="sources.js?v=35"></script>
+  <script src="reader-extras.js?v=35"></script>
+  <script src="discover.js?v=35"></script>
+  <script src="app.js?v=35"></script>
 </body>
 </html>

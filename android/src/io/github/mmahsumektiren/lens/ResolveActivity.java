@@ -19,32 +19,18 @@ import java.util.regex.Pattern;
 /**
  * Reddit gönderilerini telefonun kendi bağlantısıyla alır ve Lens'e veri olarak verir.
  * Reddit, tarayıcıdaki web uygulamalarının (Lens PWA) gönderiyi okumasına izin vermiyor; yerel uygulama okuyabiliyor.
- * Girişler: Lens'teki "Lens Seçim ile aç" düğmesi (lensresolve://open?u=…) ya da paylaş menüsündeki "Lens Reddit".
+ * Girişler: Lens'teki "Lens Seçim ile aç" düğmesi (lensresolve://open?u=…) ya da paylaş menüsündeki "Lens" (ShareActivity).
  */
 public class ResolveActivity extends Activity {
     private static final String UA = "Mozilla/5.0 (Linux; Android 14; 23127PN0CG) AppleWebKit/537.36 "
             + "(KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36";
-    private static final Pattern REDDIT = Pattern.compile("https?://(?:[a-z0-9-]+\\.)?(?:reddit\\.com|redd\\.it)/\\S+", Pattern.CASE_INSENSITIVE);
     private static final Pattern POST = Pattern.compile("/r/[^/]+/comments/[a-z0-9]+[^?#]*|/comments/[a-z0-9]+[^?#]*", Pattern.CASE_INSENSITIVE);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Intent in = getIntent();
-        String start = null;
-        if (in != null && Intent.ACTION_SEND.equals(in.getAction())) {
-            String text = in.getStringExtra(Intent.EXTRA_TEXT);
-            if (text == null) { finish(); return; }
-            Matcher m = REDDIT.matcher(text);
-            if (!m.find()) { // Reddit değilse metni olduğu gibi Lens'e ver
-                LensLauncher.open(this, LensLauncher.textUri(text));
-                finish();
-                return;
-            }
-            start = m.group();
-        } else if (in != null && in.getData() != null) {
-            start = in.getData().getQueryParameter("u");
-        }
+        String start = in != null && in.getData() != null ? in.getData().getQueryParameter("u") : null;
         if (start == null || !start.startsWith("http")) { finish(); return; }
 
         final String url = start.replaceFirst("^http://", "https://");
@@ -65,14 +51,9 @@ public class ResolveActivity extends Activity {
                 runOnUiThread(new Runnable() {
                     @Override
                     public void run() {
-                        Uri.Builder b = Uri.parse(LensLauncher.BASE).buildUpon()
-                                .appendQueryParameter("url", fPost != null ? fPost : url);
-                        if (fData != null) b.appendQueryParameter("reddit", fData);
-                        else {
-                            b.appendQueryParameter("rerr", "Lens Seçim: " + fErr);
-                            Toast.makeText(ResolveActivity.this, R.string.resolve_failed, Toast.LENGTH_LONG).show();
-                        }
-                        LensLauncher.open(ResolveActivity.this, b.build());
+                        if (fData == null) Toast.makeText(ResolveActivity.this, R.string.resolve_failed, Toast.LENGTH_LONG).show();
+                        LensLauncher.open(ResolveActivity.this, LensLauncher.dataUri(fPost != null ? fPost : url, null,
+                                fData != null ? "reddit" : "perr", fData != null ? fData : "Lens Seçim: " + fErr));
                         finish();
                     }
                 });

@@ -106,39 +106,9 @@ function htmlToArticle(html, url) {
   const base = doc.createElement('base');
   base.href = url;
   doc.head.prepend(base);
-  const meta = (n) => doc.querySelector(`meta[property="${n}"],meta[name="${n}"]`)?.content || '';
-  const art = new Readability(doc).parse();
-  if (!art || !art.content) throw new Error('makale bulunamadı');
-  const box = new DOMParser().parseFromString(art.content, 'text/html').body;
-  return {
-    title: art.title || meta('og:title'),
-    byline: art.byline || '',
-    site: art.siteName || hostOf(url),
-    published: art.publishedTime || meta('article:published_time'),
-    image: absUrl(meta('og:image'), url),
-    blocks: domToBlocks(box, url)
-  };
+  return extractArticle(doc, url); // page-extract.js (Lens Seçim de aynısını kullanır)
 }
-function absUrl(u, base) { try { return u ? new URL(u, base).href : ''; } catch { return ''; } }
-function domToBlocks(root, base) {
-  const out = [];
-  const els = root.querySelectorAll('p,h1,h2,h3,h4,li,blockquote,img,figcaption,pre');
-  for (const el of els) {
-    const tag = el.tagName.toLowerCase();
-    if (tag === 'img') {
-      const src = absUrl(el.getAttribute('src') || el.getAttribute('data-src'), base);
-      if (src && !/^data:/.test(src)) out.push({ t: 'img', src });
-      continue;
-    }
-    if ((tag === 'li' || tag === 'blockquote') && el.querySelector('p')) continue;
-    if (tag === 'p' && el.closest('li,figcaption')) continue;
-    const text = el.textContent.replace(/[ \t\n]+/g, ' ').trim();
-    if (!text) continue;
-    const t = /^h[1-4]$/.test(tag) ? 'h' : tag === 'li' ? 'li' : tag === 'blockquote' ? 'q' : tag === 'figcaption' ? 'cap' : 'p';
-    out.push({ t, text });
-  }
-  return out;
-}
+function absUrl(u, base) { return peAbsUrl(u, base); }
 function markdownToBlocks(md) {
   const out = [];
   const clean = (s) => s
@@ -187,7 +157,10 @@ function tidyBlocks(blocks, title) {
 
 let articles = [];
 async function loadArticles() { try { articles = (await DB.all('articles')) || []; } catch { articles = []; } }
+// Tweet'ler okuyucuda açılır ama Kütüphanem'e kaydedilmez (geçici yazı)
+const tempArticles = new Map();
 async function saveArticle(a) {
+  if (a.ephemeral) { tempArticles.set(a.id, a); return; }
   await DB.put(a, 'articles');
   const i = articles.findIndex((x) => x.id === a.id);
   if (i >= 0) articles[i] = a; else articles.push(a);
@@ -217,6 +190,7 @@ async function importRedditData(raw, url) {
     const d = JSON.parse(raw);
     if (!Array.isArray(d.j) || !d.j[0]?.data?.children?.[0]) throw new Error('boş veri');
     // JSON dışındaki yollarda kaynağı ve (teşhis için) nedenini sonda küçük bir notla göster
+    logSvc('reddit-telefon', true);
     const note = d.via && d.via !== 'json'
       ? 'Kaynak: ' + (d.via === 'page' ? 'Reddit sayfası' : 'Reddit RSS (puanlar yok)') + (d.diag ? ' · ' + d.diag.replace(/ · $/, '') : '') : '';
     return await saveRedditArticle(d.j, d.path || '', url || ('https://www.reddit.com' + (d.path || '')), note, true); // Lens Seçim'den gelen taze veri eskisinin yerine geçer
@@ -226,7 +200,7 @@ async function importRedditData(raw, url) {
   }
 }
 
-async function importArticle(url, titleHint = '') {
+async function importArticle(url, titleHint = '', opts = {}) {
   url = normUrl(url);
   await loadArticles();
   const existing = articles.find((a) => a.url === url);
@@ -235,26 +209,32 @@ async function importArticle(url, titleHint = '') {
   show('reader');
   const host = $('#readerBody');
   $('#readerSite').textContent = hostOf(url);
-  host.innerHTML = `<div class="r-loading"><div class="spinner"></div><p>Sayfa sadeleştiriliyor…</p><p class="sub">${esc(titleHint || url)}</p></div>`;
+  host.innerHTML = `<div class="r-loading"><div class="spinner"></div><p>Sayfa sadeleştiriliyor…</p><p class="sub r-url">${esc(titleHint || url)}</p></div>`;
   const errs = window.launchErr ? [window.launchErr] : [];
+  if (window.launchErr) logSvc(/^Lens Seçim/.test(window.launchErr) ? 'reddit-telefon' : 'telefon', false, hostOf(url) + ': ' + window.launchErr.replace(/^(telefon|Lens Seçim): /, ''));
   window.launchErr = '';
   // Reddit Jina'yı engelliyor: gönderinin JSON'unu telefondan doğrudan iste
   if (isReddit(url)) {
     try {
       const { j, path } = await fetchReddit(url);
+      logSvc('reddit', true);
       return await saveRedditArticle(j, path, url);
     } catch (e) {
       errs.push('reddit: ' + (e.message || 'erişilemedi'));
+      logSvc('reddit', false, e.message || 'erişilemedi');
     }
   }
 
-  for (const [name, fn] of READ_SVCS) {
+  // Lens Seçim'in telefonda açıp çıkardığı yazı varsa önce onu dene (bot korumasına takılmaz)
+  const svcs = opts.page ? [['telefon', async () => opts.page], ...READ_SVCS] : READ_SVCS;
+  for (const [name, fn] of svcs) {
     try {
       const a = await fn(url);
       const blocks = tidyBlocks(a.blocks || [], cleanTitle(a.title || titleHint));
       const words = blocks.filter((b) => b.text).reduce((n, b) => n + b.text.split(/\s+/).length, 0);
-      if (looksBlocked(a.title, blocks)) { errs.push(name + ': engel sayfası geldi (bot koruması)'); continue; }
-      if (words < 40) { errs.push(name + ': metin çok kısa (muhtemelen bot doğrulaması)'); continue; }
+      if (looksBlocked(a.title, blocks)) { errs.push(name + ': engel sayfası geldi (bot koruması)'); logSvc(name, false, hostOf(url) + ': engel sayfası'); continue; }
+      if (words < 40) { errs.push(name + ': metin çok kısa (muhtemelen bot doğrulaması)'); logSvc(name, false, hostOf(url) + ': metin çok kısa'); continue; }
+      logSvc(name, true);
       const art = {
         id: uid(), url, title: cleanTitle(a.title || titleHint, a.site) || hostOf(url), site: a.site || hostOf(url), byline: a.byline || '',
         published: a.published || '', image: a.image || blocks.find((x) => x.t === 'img')?.src || '', blocks, words, minutes: Math.max(1, Math.round(words / 200)),
@@ -263,38 +243,69 @@ async function importArticle(url, titleHint = '') {
       await saveArticle(art);
       return openArticle(art.id);
     } catch (e) {
-      errs.push(name + ': ' + (e.name === 'AbortError' ? 'zaman aşımı' : e.message || 'erişilemedi'));
+      const m = e.name === 'AbortError' ? 'zaman aşımı' : e.message || 'erişilemedi';
+      errs.push(name + ': ' + m);
+      logSvc(name, false, hostOf(url) + ': ' + m);
     }
   }
   store.set('failedImport', { url, title: titleHint, at: now() });
   if (isReddit(url)) {
-    host.innerHTML = `<div class="r-loading fail">
-      <p><b>Reddit gönderisi buradan açılamadı.</b></p>
-      <p>Reddit, Lens gibi web uygulamalarının gönderiyi okumasına izin vermiyor. <b>Lens Seçim</b> uygulaması gönderiyi telefonundan alıp burada açar.</p>
-      <div class="row" style="justify-content:center">
-        <a class="primary" href="${esc(resolveIntentUrl(url))}" style="text-decoration:none;padding:11px 16px;border-radius:var(--radius)">Lens Seçim ile aç</a>
-        <button class="ghost" id="rRetry">Tekrar dene</button>
-      </div>
-      <p class="sub">İpucu: Reddit'te <b>Paylaş → Lens Reddit</b> seçersen bu adım hiç çıkmaz. Düğme işe yaramazsa Lens Seçim'in son sürümünü yükle.</p>
-      <details class="sub"><summary>Teknik ayrıntı</summary>${esc(errs.join(' · '))}</details></div>`;
+    host.innerHTML = `<div class="r-loading">${failHTML({
+      title: 'Reddit gönderisi buradan açılamadı',
+      text: 'Reddit, Lens gibi web uygulamalarının gönderiyi okumasına izin vermiyor. <b>Lens Seçim</b> gönderiyi telefonundan alıp burada açar.',
+      primary: { label: 'Lens Seçim ile aç', ico: 'phone', href: resolveIntentUrl(url), primary: true },
+      secondary: [{ label: 'Tekrar dene', ico: 'refresh', id: 'rRetry' }],
+      note: `İpucu: Reddit'te <b>Paylaş → ${IS_DEV ? 'Lens Test' : 'Lens'}</b> dersen gönderi doğrudan açılır, bu ekran hiç çıkmaz.`,
+      details: errs.join(' · ')
+    })}</div>`;
     $('#rRetry').onclick = () => importArticle(url, titleHint);
     return;
   }
   const blocked = errs.some((e) => /metin çok kısa|engel sayfası|HTTP 40[13]|HTTP 451/.test(e));
-  host.innerHTML = `<div class="r-loading fail">
-    <p><b>Bu sayfa getirilemedi.</b></p>
-    <p>${blocked ? 'Bu site otomatik erişimi engelliyor (bot koruması). Uzaktan hiçbir servis sayfayı alamıyor, ama sen tarayıcında zaten görüyorsun:' : 'Okuma servislerine ulaşılamadı. Tekrar deneyebilir ya da metni tarayıcından gönderebilirsin:'}</p>
-    <ol class="steps">
-      <li>Sayfayı Chrome'da aç</li>
-      <li>Yazının üstüne uzun bas → <b>Tümünü seç</b></li>
-      <li><b>Paylaş → Lens</b> — yazı okuyucuda açılır</li>
-    </ol>
-    <div class="row" style="justify-content:center">
-      <a class="ghost" href="${esc(url)}" target="_blank" rel="noopener" style="text-decoration:none;padding:11px 16px">Sayfayı aç ↗</a>
-      <button class="ghost" id="rRetry">Tekrar dene</button>
-    </div>
-    <details class="sub"><summary>Teknik ayrıntı</summary>${esc(errs.join(' · '))}</details></div>`;
+  host.innerHTML = `<div class="r-loading">${failHTML({
+    title: 'Bu sayfa getirilemedi',
+    text: blocked
+      ? 'Site otomatik erişimi engelliyor (bot koruması).' + (opts.page ? '' : ' <b>Telefonla aç</b> sayfayı senin bağlantınla açar, çoğu sitede işe yarar.')
+      : 'Okuma servislerine ulaşılamadı. Tekrar deneyebilir ya da sayfayı telefonla açabilirsin.',
+    primary: opts.page ? null : { label: 'Telefonla aç', ico: 'phone', href: fetchIntentUrl(url), primary: true },
+    secondary: [{ label: 'Sayfayı aç', ico: 'external', href: url }, { label: 'Tekrar dene', ico: 'refresh', id: 'rRetry' }],
+    note: 'O da olmazsa: sayfayı Chrome’da aç → yazıya uzun bas → <b>Tümünü seç</b> → <b>Paylaş → Lens</b>.',
+    details: errs.join(' · ')
+  })}</div>`;
   $('#rRetry').onclick = () => importArticle(url, titleHint);
+}
+
+/* ---------- tweet'i okuyucuda aç (Kütüphanem'e kaydedilmez) ---------- */
+async function openTweet(url, id) {
+  await loadOxford();
+  show('reader');
+  $('#readerSite').textContent = 'x.com';
+  const host = $('#readerBody');
+  host.innerHTML = `<div class="r-loading"><div class="spinner"></div><p>Tweet getiriliyor…</p></div>`;
+  const { tweet, errs } = await getTweetText(url, id);
+  if (!tweet) {
+    host.innerHTML = `<div class="r-loading">${failHTML({
+      title: 'Tweet metni alınamadı',
+      text: 'Tweet’i X’te açıp metni kopyalayabilir, sonra Ekle’ye yapıştırabilirsin.',
+      secondary: [{ label: 'Tekrar dene', ico: 'refresh', id: 'rRetry' }, { label: 'Ekle’de aç', ico: 'plus', id: 'rToAdd' }],
+      details: errs.join(' · ')
+    })}</div>`;
+    $('#rRetry').onclick = () => openTweet(url, id);
+    $('#rToAdd').onclick = () => { addState.source = url; $('#sourceLine').hidden = false; $('#sourceLine').textContent = 'Kaynak: ' + url; show('add'); loadTweetText(url, id); };
+    return;
+  }
+  const paras = tweet.text.split(/\n{2,}/).map((x) => x.trim()).filter(Boolean);
+  const art = {
+    id: 'tweet:' + id, ephemeral: true, url: tweet.url || url, tweet,
+    title: (tweet.name || '@' + (tweet.handle || 'x')) + ': ' + tweet.text.replace(/\s+/g, ' ').slice(0, 80),
+    site: 'x.com' + (tweet.handle ? ' · @' + tweet.handle : ''), byline: '', published: '', image: '',
+    blocks: paras.map((text) => ({ t: 'p', text })), words: wordCount(tweet.text), minutes: 1,
+    createdAt: now(), progress: 0, scrollY: 0, trans: {}
+  };
+  const prev = tempArticles.get(art.id);
+  if (prev) Object.assign(art, { trans: prev.trans, showTr: prev.showTr, looked: prev.looked });
+  await saveArticle(art);
+  return openArticle(art.id);
 }
 
 /* ---------- paylaşılan uzun metinden yazı (bot korumalı siteler için: Tümünü seç → Paylaş) ---------- */
@@ -370,17 +381,25 @@ async function renderLibrary() {
   articles = articles.filter((x) => !looksBlocked(x.title, x.blocks));
   const list = articles.slice().sort((a, b) => (b.lastOpened || b.createdAt) - (a.lastOpened || a.createdAt));
   await ensureDifficulty(list);
-  $('#libList').innerHTML = list.length ? list.map((a) => `
+  const itemHTML = (a) => `
     <li class="lib-item" data-open="${a.id}">
       ${a.image ? `<img src="${esc(a.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
       <div class="lib-txt">
         <div class="lib-title">${esc(a.title)}</div>
-        <div class="sub">${esc(a.site)} · ${a.minutes} dk${a.progress > 0.97 ? ' · bitti ✓' : a.progress > 0.02 ? ` · %${Math.round(a.progress * 100)}` : ''}</div>
+        <div class="sub">${esc(a.site)} · ${a.minutes} dk${a.progress > 0.97 ? ' · bitti' : a.progress > 0.02 ? ` · %${Math.round(a.progress * 100)}` : ''}</div>
         ${a.diff ? `<div class="lib-diff">${diffBadge(a)}${a.looked?.length ? ` <span class="sub">· ${a.looked.length} kelimeye baktın</span>` : ''}</div>` : ''}
         <div class="lib-bar"><span style="width:${Math.round((a.progress || 0) * 100)}%"></span></div>
       </div>
-      <button class="lib-del" data-del="${a.id}" aria-label="Sil">✕</button>
-    </li>`).join('') : `<div class="empty"><span class="big-ico">📰</span>Henüz yazı yok. Chrome'da bir haberi açıp ⋮ → Paylaş → <b>Lens</b> de, ya da linki yukarıya yapıştır.</div>`;
+      <button class="lib-del icon-btn" data-del="${a.id}" aria-label="Sil">${icon('close', 18)}</button>
+    </li>`;
+  const going = list.filter((a) => a.progress > 0.02 && a.progress < 0.97);
+  const rest = list.filter((a) => !going.includes(a));
+  const head = (t) => `<li class="lib-h">${t}</li>`;
+  $('#libList').innerHTML = !list.length ? emptyHTML({ ico: 'article', title: 'Kütüphanen boş', text: 'Chrome’da bir sayfayı ⋮ → Paylaş → <b>Lens</b> ile gönder, linki yukarıya yapıştır ya da Keşfet’ten bir yazı seç.',
+      action: actionHTML({ label: 'Keşfet’e göz at', ico: 'read', id: 'emptyDisc' }) })
+    : going.length
+    ? head('Okumaya devam et') + going.map(itemHTML).join('') + (rest.length ? head('Diğer yazılar') + rest.map(itemHTML).join('') : '')
+    : list.map(itemHTML).join('');
 }
 
 /* ---------- okuyucu ---------- */
@@ -402,7 +421,7 @@ function applyReadPrefs() {
 async function openArticle(id) {
   await loadOxford();
   if (!articles.length) await loadArticles();
-  const a = articles.find((x) => x.id === id);
+  const a = articles.find((x) => x.id === id) || tempArticles.get(id);
   if (!a) return show('read');
   rd.art = a;
   rd.sel = null;
@@ -434,9 +453,20 @@ function renderArticle() {
     if (bl.t === 'h' && b < 3 && tnorm(bl.text) === tnorm(a.title)) return ''; // başlığın içerikteki kopyası
     if (bl.t === 'img') return `<img class="r-img" src="${esc(bl.src)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">`;
     const tag = { h: 'h2', li: 'li', q: 'blockquote', cap: 'p', p: 'p' }[bl.t] || 'p';
-    const tr = a.trans?.[b] && a.showTr?.[b] ? `<div class="r-tr" data-trof="${b}">${esc(a.trans[b])}</div>` : '';
+    const tr = a.trans?.[b] && a.showTr?.[b] ? `<div class="r-tr" data-trof="${b}"><span class="r-tr-l">Türkçe</span>${esc(a.trans[b])}</div>` : '';
     return `<${tag} class="rb rb-${bl.t}" data-block="${b}">${textHTML(bl.text, b)}</${tag}>${tr}`;
   });
+  if (a.tweet) { // tweet: X'teki görünümüyle, kelimelere dokunulabilir
+    const body = a.blocks.map((bl, b) => {
+      const tr = a.trans?.[b] && a.showTr?.[b] ? `<div class="r-tr" data-trof="${b}"><span class="r-tr-l">Türkçe</span>${esc(a.trans[b])}</div>` : '';
+      return `<span class="rb" data-block="${b}">${textHTML(bl.text, b)}</span>${tr}`;
+    }).join('\n\n');
+    $('#readerBody').innerHTML = `<div class="r-tweet">${tweetHTML(a.tweet, body)}</div>
+      <p class="sub r-tw-hint">Bir kelimeye dokun: anlamı, telaffuzu ve sözlükler açılır.</p>
+      <section class="r-sum" id="rSum">${endSummaryHTML(a)}</section>`;
+    if (rd.sel) markSelection();
+    return;
+  }
   $('#readerBody').innerHTML = `
     <header class="r-head">
       <div class="r-meta">${esc(a.site)}${date ? ' · ' + esc(date) : ''} · ${a.minutes} dk</div>
@@ -446,7 +476,7 @@ function renderArticle() {
     ${a.image && !a.blocks.some((x) => x.t === 'img') ? `<img class="r-img" src="${esc(a.image)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
     <div class="r-text">${parts.join('')}</div>
     <section class="r-sum" id="rSum">${endSummaryHTML(a)}</section>
-    <footer class="r-end">${a.url ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">Orijinal sayfa ↗</a>` : ''}</footer>`;
+    <footer class="r-end">${a.url ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">Orijinal sayfa ${icon('external', 14)}</a>` : ''}</footer>`;
   if (rd.sel) markSelection();
 }
 
@@ -506,17 +536,17 @@ async function openSheet() {
     <div class="sh-top">
       <div class="sh-term">${esc(term)}</div>
       ${ox && LEVELS[ox.level] ? `<span class="lv l${ox.level}">${LEVELS[ox.level]}</span>` : ''}
-      <button class="speak" data-speak="${esc(term)}" aria-label="Sesli oku">🔊</button>
-      <button class="sh-x" id="shClose" aria-label="Kapat">✕</button>
+      <button class="speak" data-speak="${esc(term)}" aria-label="Sesli oku">${icon('speak', 18)}</button>
+      <button class="sh-x icon-btn" id="shClose" aria-label="Kapat">${icon('close', 20)}</button>
     </div>
     <div class="sub sh-ipa"></div>
     <div id="shBody" class="sh-body"><div class="sub">${settings.apiKey ? 'Anlam getiriliyor…' : 'Anlam için Ayarlar’dan Gemini anahtarı ekle.'}</div></div>
     <div class="sh-actions">
-      <button class="primary" id="shAdd">${inCards ? '✓ Kartlarında' : '＋ Kartlara ekle'}</button>
-      <button class="ghost${rd.extend ? ' on' : ''}" id="shExt">↔ Kalıp seç</button>
-      <button class="ghost" id="shTr">¶ Çevir</button>
-      <button class="ghost" id="shRead">¶ Dinle</button>
-      <button class="ghost" id="shDictBtn">📚 Sözlük</button>
+      <button class="primary act" id="shAdd">${inCards ? icon('check', 18) + '<span>Kartlarında</span>' : icon('plus', 18) + '<span>Kartlara ekle</span>'}</button>
+      <button class="ghost act${rd.extend ? ' on' : ''}" id="shExt">${icon('phrase', 18)}<span>Kalıp seç</span></button>
+      <button class="ghost act" id="shDictBtn">${icon('dict', 18)}<span>Sözlük</span></button>
+      <button class="ghost act" id="shTr">${icon('translate', 18)}<span>Paragrafı çevir</span></button>
+      <button class="ghost act" id="shRead">${icon('play', 18)}<span>Paragrafı dinle</span></button>
     </div>
     <div id="shDict" class="sh-dict" hidden></div>`;
   recordLooked(term, sentence);
@@ -536,8 +566,21 @@ async function openSheet() {
       ${ai.context_tr ? `<p class="sh-ctx"><span class="sub">Cümle:</span> ${esc(ai.context_tr)}</p>` : ''}`;
   } catch (e) {
     const gt = 'https://translate.google.com/?sl=en&tl=tr&op=translate&text=' + encodeURIComponent(sentence);
+    // kota doluysa en azından temel anlamı göster (ücretsiz çeviri + sözlük)
+    let basic = null;
+    if (e.kind === 'quota' || e.kind === 'other') { try { basic = await basicAI(term, sentence); } catch {} }
+    if (!rd.sel || selectionInfo().term !== term) return;
+    if (basic) {
+      if (basic.ipa && $('.sh-ipa')) $('.sh-ipa').textContent = basic.ipa;
+      $('#shBody').innerHTML = `
+        <div class="meaning">${esc(basic.meaning_tr)}</div>
+        ${basic.pos ? `<div class="sub">${esc(basic.pos)}</div>` : ''}
+        ${basic.explanation_tr.startsWith('İngilizce') ? `<p>${esc(basic.explanation_tr.replace(/ \(Temel kart.*$/, ''))}</p>` : ''}
+        <div class="sub">Temel çeviri — ${esc(friendlyGeminiError(e))}</div>`;
+      return;
+    }
     $('#shBody').innerHTML = `<div class="sub">${esc(friendlyGeminiError(e))}</div>
-      <a class="sub" href="${gt}" target="_blank" rel="noopener">Google Çeviri'de aç ↗</a>`;
+      <a class="sub" href="${gt}" target="_blank" rel="noopener">Google Çeviri'de aç ${icon('external', 14)}</a>`;
   }
 }
 function closeSheet() {
@@ -562,8 +605,8 @@ async function addSelectionToCards() {
   } else {
     const ai = rd.cache.get(term.toLowerCase() + '|' + sentence) || null;
     await saveCard({
-      id: uid(), term, context: sentence, source: a.url, tweet: null,
-      article: { id: a.id, title: a.title, site: a.site },
+      id: uid(), term, context: sentence, source: a.url, tweet: a.tweet || null,
+      article: a.tweet ? null : { id: a.id, title: a.title, site: a.site },
       createdAt: now(), status: ai ? 'ready' : 'pending', ai, error: null, seen: 1, srs: SRS.fresh()
     });
     toast('Kartlara eklendi');
@@ -577,7 +620,7 @@ async function addSelectionToCards() {
   markSelection();
   window.scrollTo(0, y);
   const btn = $('#shAdd');
-  if (btn) btn.textContent = '✓ Kartlarında';
+  if (btn) btn.innerHTML = icon('check', 18) + '<span>Kartlarında</span>';
 }
 
 async function translateBlock(b) {
@@ -615,7 +658,7 @@ function readBlocksFrom(b) {
   stopReadAloud();
   if (!('speechSynthesis' in window)) return toast('Bu tarayıcıda sesli okuma yok');
   rd.reading = true;
-  $('#rListen').textContent = '⏹';
+  $('#rListen').innerHTML = icon('stop', 22);
   const step = (i) => {
     const blocks = rd.art.blocks;
     while (i < blocks.length && !blocks[i].text) i++;
@@ -638,7 +681,7 @@ function stopReadAloud() {
   if ('speechSynthesis' in window) speechSynthesis.cancel();
   $$('#readerBody .rb.reading').forEach((x) => x.classList.remove('reading'));
   const btn = $('#rListen');
-  if (btn) btn.textContent = '🎧';
+  if (btn) btn.innerHTML = icon('listen', 22);
 }
 function firstVisibleBlock() {
   const els = $$('#readerBody .rb');
@@ -658,7 +701,7 @@ function renderPrefs() {
       ${[['auto', 'Oto'], ['light', 'Açık'], ['sepia', 'Sepya'], ['dark', 'Koyu']].map(([k, l]) => `<button data-theme="${k}" class="${readPrefs.theme === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
     <div class="pref"><span>Oxford vurgusu</span><div class="seg">
       ${[[0, 'Kapalı'], [1, 'Hepsi'], [2, 'A2+'], [3, 'B1+'], [4, 'B2+'], [5, 'C1']].map(([k, l]) => `<button data-ox="${k}" class="${readPrefs.ox === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
-    <div class="legend"><span class="w ox l3">altı çizili</span> Oxford listesinde · <span class="w kn">noktalı</span> kartlarında var</div>`;
+    <div class="legend"><span class="w ox l3">altı çizili</span> Oxford listesinde, seçtiğin seviye ve üstü · <span class="w kn">yeşil zeminli</span> kartlarında var</div>`;
 }
 
 function bindReader() {
