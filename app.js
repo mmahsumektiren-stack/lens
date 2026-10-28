@@ -322,7 +322,7 @@ async function freeDefine(word) {
 }
 async function basicAI(term, context) {
   const single = !/\s/.test(term.trim());
-  const lemma = single ? (lemmaCandidates(term.toLowerCase()).find((k) => oxLookup(k)) || term.toLowerCase()) : term;
+  const lemma = single ? (oxLookup(term)?.word || term.toLowerCase()) : term;
   const [mean, def, ctx] = await Promise.all([
     freeTranslate(term).catch(() => ''),
     single ? freeDefine(lemma).catch(() => null) : Promise.resolve(null),
