@@ -254,7 +254,7 @@ async function importArticle(url, titleHint = '', opts = {}) {
         <a class="primary" href="${esc(resolveIntentUrl(url))}" style="text-decoration:none;padding:11px 16px;border-radius:var(--radius)">Lens Seçim ile aç</a>
         <button class="ghost" id="rRetry">Tekrar dene</button>
       </div>
-      <p class="sub">İpucu: Reddit'te <b>Paylaş → Lens Reddit</b> seçersen bu adım hiç çıkmaz. Düğme işe yaramazsa Lens Seçim'in son sürümünü yükle.</p>
+      <p class="sub">İpucu: Reddit'te <b>Paylaş → ${IS_DEV ? 'Lens Test' : 'Lens'}</b> dersen gönderi doğrudan açılır, bu ekran hiç çıkmaz.</p>
       <details class="sub"><summary>Teknik ayrıntı</summary>${esc(errs.join(' · '))}</details></div>`;
     $('#rRetry').onclick = () => importArticle(url, titleHint);
     return;
