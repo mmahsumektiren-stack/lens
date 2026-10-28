@@ -187,6 +187,7 @@ async function importRedditData(raw, url) {
     const d = JSON.parse(raw);
     if (!Array.isArray(d.j) || !d.j[0]?.data?.children?.[0]) throw new Error('boş veri');
     // JSON dışındaki yollarda kaynağı ve (teşhis için) nedenini sonda küçük bir notla göster
+    logSvc('reddit-telefon', true);
     const note = d.via && d.via !== 'json'
       ? 'Kaynak: ' + (d.via === 'page' ? 'Reddit sayfası' : 'Reddit RSS (puanlar yok)') + (d.diag ? ' · ' + d.diag.replace(/ · $/, '') : '') : '';
     return await saveRedditArticle(d.j, d.path || '', url || ('https://www.reddit.com' + (d.path || '')), note, true); // Lens Seçim'den gelen taze veri eskisinin yerine geçer
@@ -207,14 +208,17 @@ async function importArticle(url, titleHint = '', opts = {}) {
   $('#readerSite').textContent = hostOf(url);
   host.innerHTML = `<div class="r-loading"><div class="spinner"></div><p>Sayfa sadeleştiriliyor…</p><p class="sub">${esc(titleHint || url)}</p></div>`;
   const errs = window.launchErr ? [window.launchErr] : [];
+  if (window.launchErr) logSvc(/^Lens Seçim/.test(window.launchErr) ? 'reddit-telefon' : 'telefon', false, hostOf(url) + ': ' + window.launchErr.replace(/^(telefon|Lens Seçim): /, ''));
   window.launchErr = '';
   // Reddit Jina'yı engelliyor: gönderinin JSON'unu telefondan doğrudan iste
   if (isReddit(url)) {
     try {
       const { j, path } = await fetchReddit(url);
+      logSvc('reddit', true);
       return await saveRedditArticle(j, path, url);
     } catch (e) {
       errs.push('reddit: ' + (e.message || 'erişilemedi'));
+      logSvc('reddit', false, e.message || 'erişilemedi');
     }
   }
 
@@ -225,8 +229,9 @@ async function importArticle(url, titleHint = '', opts = {}) {
       const a = await fn(url);
       const blocks = tidyBlocks(a.blocks || [], cleanTitle(a.title || titleHint));
       const words = blocks.filter((b) => b.text).reduce((n, b) => n + b.text.split(/\s+/).length, 0);
-      if (looksBlocked(a.title, blocks)) { errs.push(name + ': engel sayfası geldi (bot koruması)'); continue; }
-      if (words < 40) { errs.push(name + ': metin çok kısa (muhtemelen bot doğrulaması)'); continue; }
+      if (looksBlocked(a.title, blocks)) { errs.push(name + ': engel sayfası geldi (bot koruması)'); logSvc(name, false, hostOf(url) + ': engel sayfası'); continue; }
+      if (words < 40) { errs.push(name + ': metin çok kısa (muhtemelen bot doğrulaması)'); logSvc(name, false, hostOf(url) + ': metin çok kısa'); continue; }
+      logSvc(name, true);
       const art = {
         id: uid(), url, title: cleanTitle(a.title || titleHint, a.site) || hostOf(url), site: a.site || hostOf(url), byline: a.byline || '',
         published: a.published || '', image: a.image || blocks.find((x) => x.t === 'img')?.src || '', blocks, words, minutes: Math.max(1, Math.round(words / 200)),
@@ -235,7 +240,9 @@ async function importArticle(url, titleHint = '', opts = {}) {
       await saveArticle(art);
       return openArticle(art.id);
     } catch (e) {
-      errs.push(name + ': ' + (e.name === 'AbortError' ? 'zaman aşımı' : e.message || 'erişilemedi'));
+      const m = e.name === 'AbortError' ? 'zaman aşımı' : e.message || 'erişilemedi';
+      errs.push(name + ': ' + m);
+      logSvc(name, false, hostOf(url) + ': ' + m);
     }
   }
   store.set('failedImport', { url, title: titleHint, at: now() });
@@ -509,6 +516,19 @@ async function openSheet() {
       ${ai.context_tr ? `<p class="sh-ctx"><span class="sub">Cümle:</span> ${esc(ai.context_tr)}</p>` : ''}`;
   } catch (e) {
     const gt = 'https://translate.google.com/?sl=en&tl=tr&op=translate&text=' + encodeURIComponent(sentence);
+    // kota doluysa en azından temel anlamı göster (ücretsiz çeviri + sözlük)
+    let basic = null;
+    if (e.kind === 'quota' || e.kind === 'other') { try { basic = await basicAI(term, sentence); } catch {} }
+    if (!rd.sel || selectionInfo().term !== term) return;
+    if (basic) {
+      if (basic.ipa && $('.sh-ipa')) $('.sh-ipa').textContent = basic.ipa;
+      $('#shBody').innerHTML = `
+        <div class="meaning">${esc(basic.meaning_tr)}</div>
+        ${basic.pos ? `<div class="sub">${esc(basic.pos)}</div>` : ''}
+        ${basic.explanation_tr.startsWith('İngilizce') ? `<p>${esc(basic.explanation_tr.replace(/ \(Temel kart.*$/, ''))}</p>` : ''}
+        <div class="sub">Temel çeviri — ${esc(friendlyGeminiError(e))}</div>`;
+      return;
+    }
     $('#shBody').innerHTML = `<div class="sub">${esc(friendlyGeminiError(e))}</div>
       <a class="sub" href="${gt}" target="_blank" rel="noopener">Google Çeviri'de aç ↗</a>`;
   }
