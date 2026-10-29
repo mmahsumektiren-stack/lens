@@ -661,6 +661,16 @@ function detailHTML(c) {
 function typeLabel(t) {
   return ({ word: 'Kelime', phrase: 'Kalıp', idiom: 'Deyim', phrasal_verb: 'Phrasal verb', slang: 'Argo', sentence: 'Cümle' })[t] || 'Kart';
 }
+// kartın eklenme zamanı: bugün/dün, bu yıl "29 Eki", daha eskisi "29 Eki 2025"
+function fmtAdded(ts) {
+  if (!ts) return '';
+  const d = new Date(ts), n = new Date();
+  const day = (x) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(n) - day(d)) / DAY);
+  if (diff === 0) return 'Bugün ' + d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  if (diff === 1) return 'Dün';
+  return d.toLocaleDateString('tr-TR', d.getFullYear() === n.getFullYear() ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' });
+}
 function fmtDue(ts) {
   const d = ts - now();
   if (d <= 0) return 'şimdi';
@@ -699,18 +709,21 @@ function renderList() {
       <div class="head" data-toggle="${c.id}">
         <div><div class="t">${esc(c.term)}</div>
           <div class="m">${c.status === 'ready' ? esc(c.ai.meaning_tr) + (c.ai.basic ? ' <span class="tag-pending">temel</span>' : '') : '<span class="tag-pending">AI bekliyor</span>'}</div></div>
-        <div class="due">${c.status === 'ready' ? esc(fmtDue(c.srs.due)) : ''}</div>
+        <div class="side">
+          <div class="due">${esc(fmtAdded(c.createdAt))}</div>
+          <button class="icon-btn del-btn" data-act="del" data-id="${c.id}" aria-label="Kartı sil">${icon('trash', 18)}</button>
+        </div>
       </div>
       <div class="detail" ${openItems.has(c.id) ? '' : 'hidden'}>
         ${c.tweet ? tweetHTML(c.tweet, highlight(c.tweet.text, c.term)) : c.context && c.context !== c.term ? `<div class="ctx">${highlight(c.context, c.term)}</div>` : ''}
         ${c.status === 'ready' ? detailHTML(c) : ''}
+        ${c.status === 'ready' ? `<div class="sub">Sonraki tekrar: ${esc(fmtDue(c.srs.due))}</div>` : ''}
         <div class="item-acts">
           <div class="pair">
             <button class="ghost act${openDicts.has(c.id) ? ' on' : ''}" data-act="dict" data-id="${c.id}">${icon('dict', 18)}<span>Sözlük</span></button>
             <button class="ghost act" data-act="regen" data-id="${c.id}">${icon('sparkle', 18)}<span>AI’yı yenile</span></button>
           </div>
           ${openDicts.has(c.id) ? `<div class="dict-box">${dictPanelHTML(c.term)}</div>` : ''}
-          <button class="danger-link" data-act="del" data-id="${c.id}">${icon('trash', 16)}<span>Kartı sil</span></button>
         </div>
       </div>
     </li>`).join('') : q
