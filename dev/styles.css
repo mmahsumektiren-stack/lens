@@ -451,3 +451,14 @@ html.dev body::after {
 }
 .dict-box { margin: var(--s3) 0; }
 .act.on { box-shadow: 0 0 0 2px var(--accent) inset; }
+/* alt panel: Oxford listesi rozeti — 3000 (çekirdek) mavi, 5000 (ileri) kehribar */
+.sh-ox { display: flex; align-items: center; gap: var(--s2); margin: calc(-1 * var(--s1)) 0 var(--s2); flex-wrap: wrap; }
+.oxb { display: inline-flex; align-items: stretch; border-radius: var(--r-pill); font-size: var(--fs-1); overflow: hidden; line-height: 1; }
+.oxb b, .oxb i { font-style: normal; padding: 5px 9px; }
+.oxb b { font-weight: 600; }
+.oxb i { font-weight: 700; }
+.oxb.o3 { box-shadow: 0 0 0 1px var(--easy) inset; color: var(--easy); }
+.oxb.o3 i { background: var(--easy); color: var(--bg); }
+.oxb.o5 { box-shadow: 0 0 0 1px var(--accent) inset; color: var(--accent-text); }
+.oxb.o5 i { background: var(--accent); color: var(--accent-ink); }
+.oxb.none { padding: 5px 9px; background: var(--surface-2); color: var(--muted); }
