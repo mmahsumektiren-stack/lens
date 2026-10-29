@@ -165,7 +165,7 @@ function tidyBlocks(blocks, title) {
 
 let articles = [];
 async function loadArticles() { try { articles = (await DB.all('articles')) || []; } catch { articles = []; } }
-// Tweet'ler okuyucuda açılır ama Kütüphanem'e kaydedilmez (geçici yazı)
+// geçici yazı desteği (ephemeral: true); tweet'ler artık Kütüphanem'e kaydedilir
 const tempArticles = new Map();
 async function saveArticle(a) {
   if (a.ephemeral) { tempArticles.set(a.id, a); return; }
@@ -283,7 +283,7 @@ async function importArticle(url, titleHint = '', opts = {}) {
   $('#rRetry').onclick = () => importArticle(url, titleHint);
 }
 
-/* ---------- tweet'i okuyucuda aç (Kütüphanem'e kaydedilmez) ---------- */
+/* ---------- tweet'i okuyucuda aç (Kütüphanem'e kaydedilir) ---------- */
 async function openTweet(url, id) {
   await loadOxford();
   show('reader');
@@ -304,7 +304,7 @@ async function openTweet(url, id) {
   }
   const paras = tweet.text.split(/\n{2,}/).map((x) => x.trim()).filter(Boolean);
   const art = {
-    id: 'tweet:' + id, ephemeral: true, url: tweet.url || url, tweet,
+    id: 'tweet:' + id, url: tweet.url || url, tweet,
     title: (tweet.name || '@' + (tweet.handle || 'x')) + ': ' + tweet.text.replace(/\s+/g, ' ').slice(0, 80),
     site: 'x.com' + (tweet.handle ? ' · @' + tweet.handle : ''), byline: '', published: '', image: '',
     blocks: paras.map((text) => ({ t: 'p', text })), words: wordCount(tweet.text), minutes: 1,
