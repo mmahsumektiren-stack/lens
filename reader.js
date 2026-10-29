@@ -12,14 +12,14 @@ let OX = null, OXF = {}, OX5 = new Set();
 async function loadOxford() {
   if (OX) return OX;
   try {
-    const j = await (await fetch('oxford.json?v=4')).json();
+    const j = await (await fetch('oxford.json?v=5')).json();
     if (j && j.h) { OX = j.h; OXF = j.f || {}; OX5 = new Set(j.x || []); } else OX = j || {}; // eski biçime karşı koruma
   } catch { OX = {}; }
   return OX;
 }
 // alt panelde: Oxford 3000 mü, 5000 mi (5000 = 3000'e eklenen B2–C1 kelimeler), hangi seviye, hangi başlıkla
 function oxBadgeHTML(term, ox) {
-  if (!ox) return `<div class="sh-ox"><span class="oxb none">Oxford 3000/5000 listesinde yok</span></div>`;
+  if (!ox) return ''; // listede yoksa hiçbir şey gösterme
   const five = OX5.has(ox.word);
   const base = ox.word !== normWord(term) ? `<span class="sub">“${esc(ox.word)}” olarak</span>` : '';
   return `<div class="sh-ox"><span class="oxb ${five ? 'o5' : 'o3'}"><b>Oxford ${five ? '5000' : '3000'}</b><i>${LEVELS[ox.level]}</i></span>${base}</div>`;

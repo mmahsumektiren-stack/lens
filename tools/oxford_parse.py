@@ -152,9 +152,9 @@ def parse_csv(f3, f5):
 
 
 if __name__ == '__main__':
-    # SRC=web (varsayılan): sitedeki liste — Oxford Text Checker bununla çalışır.
-    # SRC=pdf: indirilebilir PDF'ler (daha yeni sürüm; AI, podcast, brake … eklenmiş, bazı eski kelimeler çıkarılmış).
-    src = os.environ.get('SRC', 'web')
+    # SRC=web: sitedeki eski liste (Text Checker) — oxford_3000.csv + oxford_5000.csv gerekir.
+    # SRC=pdf (varsayılan, Lens'in kullandığı): indirilebilir PDF'ler (daha yeni sürüm; AI, podcast, brake … eklenmiş, bazı eski kelimeler çıkarılmış).
+    src = os.environ.get('SRC', 'pdf')
     if src == 'pdf':
         heads, pos, bad = parse(['3000r.txt'])
         in3 = set(heads)
