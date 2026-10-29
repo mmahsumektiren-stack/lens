@@ -8,14 +8,21 @@
    (structures → structure, stopped → stop, bigger → big, children → child). Türetmeler (-ly, -ness, "yapan" -er)
    köke indirilmez: stably ≠ stab, killer ≠ kill — Oxford Text Checker da böyle çalışır. */
 const LEVELS = ['', 'A1', 'A2', 'B1', 'B2', 'C1'];
-let OX = null, OXF = {};
+let OX = null, OXF = {}, OX5 = new Set();
 async function loadOxford() {
   if (OX) return OX;
   try {
-    const j = await (await fetch('oxford.json?v=3')).json();
-    if (j && j.h) { OX = j.h; OXF = j.f || {}; } else OX = j || {}; // eski biçime karşı koruma
+    const j = await (await fetch('oxford.json?v=5')).json();
+    if (j && j.h) { OX = j.h; OXF = j.f || {}; OX5 = new Set(j.x || []); } else OX = j || {}; // eski biçime karşı koruma
   } catch { OX = {}; }
   return OX;
+}
+// alt panelde: Oxford 3000 mü, 5000 mi (5000 = 3000'e eklenen B2–C1 kelimeler), hangi seviye, hangi başlıkla
+function oxBadgeHTML(term, ox) {
+  if (!ox) return ''; // listede yoksa hiçbir şey gösterme
+  const five = OX5.has(ox.word);
+  const base = ox.word !== normWord(term) ? `<span class="sub">“${esc(ox.word)}” olarak</span>` : '';
+  return `<div class="sh-ox"><span class="oxb ${five ? 'o5' : 'o3'}"><b>Oxford ${five ? '5000' : '3000'}</b><i>${LEVELS[ox.level]}</i></span>${base}</div>`;
 }
 function normWord(w) {
   w = w.toLowerCase().replace(/[’]/g, "'").replace(/'s$/, '').replace(/'$/, '');
@@ -536,10 +543,10 @@ async function openSheet() {
     <div class="sh-grip"></div>
     <div class="sh-top">
       <div class="sh-term">${esc(term)}</div>
-      ${ox && LEVELS[ox.level] ? `<span class="lv l${ox.level}">${LEVELS[ox.level]}</span>` : ''}
       <button class="speak" data-speak="${esc(term)}" aria-label="Sesli oku">${icon('speak', 18)}</button>
       <button class="sh-x icon-btn" id="shClose" aria-label="Kapat">${icon('close', 20)}</button>
     </div>
+    ${single ? oxBadgeHTML(term, ox) : ''}
     <div class="sub sh-ipa"></div>
     <div id="shBody" class="sh-body"><div class="sub">${settings.apiKey ? 'Anlam getiriliyor…' : 'Anlam için Ayarlar’dan Gemini anahtarı ekle.'}</div></div>
     <div class="sh-actions">

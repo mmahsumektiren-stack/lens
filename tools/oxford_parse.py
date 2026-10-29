@@ -132,11 +132,39 @@ def build(heads, pos):
     return forms
 
 
+CSV_POS = {'noun': 'n.', 'verb': 'v.', 'adjective': 'adj.', 'adverb': 'adv.', 'pronoun': 'pron.', 'preposition': 'prep.',
+           'determiner': 'det.', 'number': 'number', 'ordinal number': 'number', 'conjunction': 'conj.', 'exclamation': 'exclam.',
+           'modal verb': 'modal v.', 'auxiliary verb': 'auxiliary v.', 'linking verb': 'linking v.'}
+
+
+def parse_csv(f3, f5):
+    """oxfordlearnersdictionaries.com kelime listesi sayfalarının dökümü (Text Checker'ın kullandığı liste)."""
+    import csv
+    heads, pos, in3 = {}, collections.defaultdict(set), set()
+    for fn in (f3, f5):
+        for r in csv.DictReader(open(fn, encoding='utf-8')):
+            w, lvl = r['word'].strip().lower().replace('’', "'"), r['cefr'].upper()
+            if not w or lvl not in RANK: continue
+            if fn == f3: in3.add(w)
+            if w not in heads or RANK[lvl] < heads[w]: heads[w] = RANK[lvl]
+            if r['type'] in CSV_POS: pos[w].add(CSV_POS[r['type']])
+    return heads, pos, in3
+
+
 if __name__ == '__main__':
-    files = sys.argv[1:] or ['3000r.txt', '5000r.txt']
-    heads, pos, bad = parse(files)
+    # SRC=web: sitedeki eski liste (Text Checker) — oxford_3000.csv + oxford_5000.csv gerekir.
+    # SRC=pdf (varsayılan, Lens'in kullandığı): indirilebilir PDF'ler (daha yeni sürüm; AI, podcast, brake … eklenmiş, bazı eski kelimeler çıkarılmış).
+    src = os.environ.get('SRC', 'pdf')
+    if src == 'pdf':
+        heads, pos, bad = parse(['3000r.txt'])
+        in3 = set(heads)
+        heads, pos, bad = parse(['3000r.txt', '5000r.txt'])
+    else:
+        heads, pos, in3 = parse_csv('oxford_3000.csv', 'oxford_5000.csv')
+        bad = []
     forms = build(heads, pos)
-    print('heads', len(heads), 'forms', len(forms), 'unparsed', len(bad), bad[:10])
+    only5 = sorted(w for w in heads if w not in in3)
+    print(src, 'heads', len(heads), '3000', len(in3), '5000-only', len(only5), 'forms', len(forms), 'unparsed', len(bad), bad[:10])
     out = os.environ.get('OUT', 'oxford.json')
-    json.dump({'h': heads, 'f': forms}, open(out, 'w'), separators=(',', ':'), sort_keys=True)
-    json.dump({w: sorted(t) for w, t in pos.items()}, open(out.replace('.json', '_pos.json'), 'w'), separators=(',', ':'), sort_keys=True)
+    # x: yalnız Oxford 5000'de olan başlıklar (geri kalanı Oxford 3000)
+    json.dump({'h': heads, 'f': forms, 'x': only5}, open(out, 'w'), separators=(',', ':'), sort_keys=True)
