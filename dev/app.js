@@ -655,6 +655,7 @@ function detailHTML(c) {
     ${(a.examples || []).length ? `<div class="block"><div class="sub">Örnekler</div>${a.examples.map((x) =>
       `<div class="ex"><div>${esc(x.en)} <button class="speak" data-speak="${esc(x.en)}" aria-label="Sesli oku">${icon('speak', 16)}</button></div><div class="tr">${esc(x.tr)}</div></div>`).join('')}</div>` : ''}
     ${(a.synonyms || []).length ? `<div class="chips">${a.synonyms.map((s) => `<span class="chip">${esc(s)}</span>`).join('')}</div>` : ''}
+    ${sightingsHTML(c)}
     ${c.source ? `<a class="sub" href="${esc(c.source)}" target="_blank" rel="noopener">${c.article ? icon('article', 16) + ' ' + esc(c.article.title) + ' · ' + esc(c.article.site) : 'Kaynağa git'} ${icon('external', 14)}</a>` : ''}`;
 }
 
@@ -708,7 +709,7 @@ function renderList() {
     <li class="item" data-id="${c.id}">
       <div class="head" data-toggle="${c.id}">
         <div><div class="t">${esc(c.term)}</div>
-          <div class="m">${c.status === 'ready' ? esc(c.ai.meaning_tr) + (c.ai.basic ? ' <span class="tag-pending">temel</span>' : '') : '<span class="tag-pending">AI bekliyor</span>'}</div></div>
+          <div class="m">${c.sightings?.length ? `<span class="seen-n" title="Başka yerlerde gördün">${icon('eye', 12)}${c.sightings.length}</span> ` : ''}${c.status === 'ready' ? esc(c.ai.meaning_tr) + (c.ai.basic ? ' <span class="tag-pending">temel</span>' : '') : '<span class="tag-pending">AI bekliyor</span>'}</div></div>
         <div class="side">
           <div class="due">${esc(fmtAdded(c.createdAt))}</div>
           <button class="icon-btn del-btn" data-act="del" data-id="${c.id}" aria-label="Kartı sil">${icon('trash', 18)}</button>
@@ -820,6 +821,8 @@ function bind() {
     }
     const dl = e.target.closest('[data-dict]');
     if (dl) { store.set('dictLast', dl.dataset.dict); return; } // bağlantı normal açılır
+    const oa = e.target.closest('[data-open-art]');
+    if (oa) { e.preventDefault(); return openArticle(oa.dataset.openArt); }
     const act = e.target.closest('[data-act]');
     if (act) {
       const c = cards.find((x) => x.id === act.dataset.id);
