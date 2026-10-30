@@ -389,13 +389,14 @@ async function renderLibrary() {
   articles = articles.filter((x) => !looksBlocked(x.title, x.blocks));
   const list = articles.slice().sort((a, b) => (b.lastOpened || b.createdAt) - (a.lastOpened || a.createdAt));
   await ensureDifficulty(list);
+  await loadOxford();
   const itemHTML = (a) => `
     <li class="lib-item" data-open="${a.id}">
       ${a.image ? `<img src="${esc(a.image)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
       <div class="lib-txt">
         <div class="lib-title">${esc(a.title)}</div>
         <div class="sub">${esc(a.site)} · ${a.minutes} dk${a.progress > 0.97 ? ' · bitti' : a.progress > 0.02 ? ` · %${Math.round(a.progress * 100)}` : ''}</div>
-        ${a.diff ? `<div class="lib-diff">${diffBadge(a)}${a.looked?.length ? ` <span class="sub">· ${a.looked.length} kelimeye baktın</span>` : ''}</div>` : ''}
+        ${a.diff || cardHitCount(a) ? `<div class="lib-diff">${a.diff ? diffBadge(a) : ''}${cardHitCount(a) ? ` <span class="hits">${icon('cards', 12)}${cardHitCount(a)} kartın geçiyor</span>` : ''}${a.looked?.length ? ` <span class="sub">· ${a.looked.length} kelimeye baktın</span>` : ''}</div>` : ''}
         <div class="lib-bar"><span style="width:${Math.round((a.progress || 0) * 100)}%"></span></div>
       </div>
       <button class="lib-del icon-btn" data-del="${a.id}" aria-label="Sil">${icon('close', 18)}</button>
@@ -441,6 +442,8 @@ async function openArticle(id) {
   $('#readerSite').textContent = a.site;
   renderArticle();
   requestAnimationFrame(() => window.scrollTo(0, a.scrollY || 0));
+  recordSightings(a).catch(() => {});
+  ensurePhrases(a);
 }
 
 function renderArticle() {
@@ -448,14 +451,17 @@ function renderArticle() {
   const known = knownSet();
   const min = readPrefs.ox;
   const date = a.published && !isNaN(Date.parse(a.published)) ? new Date(a.published).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
-  const wordSpan = (raw, b, i) => {
-    let cls = 'w';
+  const wordSpan = (raw, b, i, ph) => {
+    let cls = 'w' + (ph != null ? ' ph' : '');
     const lw = raw.toLowerCase();
     if (lemmaCandidates(lw).some((k) => known.has(k))) cls += ' kn';
     else if (min) { const o = oxLookup(lw); if (o && o.level >= min) cls += ' ox l' + o.level; }
     return `<span class="${cls}" data-b="${b}" data-i="${i}">${esc(raw)}</span>`;
   };
-  const textHTML = (text, b) => tokenize(text).map((t, i) => (t.word ? wordSpan(t.raw, b, i) : esc(t.raw))).join('');
+  const textHTML = (text, b) => {
+    const marks = b >= 0 ? phraseMarks(text, a.phrases) : new Map();
+    return tokenize(text).map((t, i) => (t.word ? wordSpan(t.raw, b, i, marks.get(i)) : marks.has(i) && marks.has(i - 1) && marks.has(i + 1) ? `<span class="ph-gap">${esc(t.raw)}</span>` : esc(t.raw))).join('');
+  };
   const tnorm = (s) => String(s || '').toLowerCase().replace(/\W+/g, ' ').trim();
   const parts = a.blocks.map((bl, b) => {
     if (bl.t === 'h' && b < 3 && tnorm(bl.text) === tnorm(a.title)) return ''; // başlığın içerikteki kopyası
@@ -471,6 +477,7 @@ function renderArticle() {
     }).join('\n\n');
     $('#readerBody').innerHTML = `<div class="r-tweet">${tweetHTML(a.tweet, body)}</div>
       <p class="sub r-tw-hint">Bir kelimeye dokun: anlamı, telaffuzu ve sözlükler açılır.</p>
+      <section class="r-sum r-ph" id="rPh"${phrasesHTML(a) ? '' : ' hidden'}>${phrasesHTML(a)}</section>
       <section class="r-sum" id="rSum">${endSummaryHTML(a)}</section>`;
     if (rd.sel) markSelection();
     return;
@@ -483,6 +490,7 @@ function renderArticle() {
     </header>
     ${a.image && !a.blocks.some((x) => x.t === 'img') ? `<img class="r-img" src="${esc(a.image)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
     <div class="r-text">${parts.join('')}</div>
+    <section class="r-sum r-ph" id="rPh"${phrasesHTML(a) ? '' : ' hidden'}>${phrasesHTML(a)}</section>
     <section class="r-sum" id="rSum">${endSummaryHTML(a)}</section>
     <footer class="r-end">${a.url ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">Orijinal sayfa ${icon('external', 14)}</a>` : ''}</footer>`;
   if (rd.sel) markSelection();
@@ -547,6 +555,7 @@ async function openSheet() {
       <button class="sh-x icon-btn" id="shClose" aria-label="Kapat">${icon('close', 20)}</button>
     </div>
     ${single ? oxBadgeHTML(term, ox) : ''}
+    ${(() => { const ph = phraseAtSelection(); return ph ? `<button class="ph-chip" id="shPh">${icon('phrase', 16)}<span>Kalıbın parçası: <b>${esc(ph.p.base)}</b>${ph.p.meaning_tr ? ' — ' + esc(ph.p.meaning_tr) : ''}</span></button>` : ''; })()}
     <div class="sub sh-ipa"></div>
     <div id="shBody" class="sh-body"><div class="sub">${settings.apiKey ? 'Anlam getiriliyor…' : 'Anlam için Ayarlar’dan Gemini anahtarı ekle.'}</div></div>
     <div class="sh-actions">
@@ -715,7 +724,9 @@ function renderPrefs() {
 function bindReader() {
   $('#readerBody').addEventListener('click', (e) => {
     if (e.target.closest('#sumAdd')) return addLookedToCards();
-    if (e.target.closest('#rSum')) return; // onay kutuları paneli kapatmasın
+    const pa = e.target.closest('[data-ph-add]');
+    if (pa) return addPhraseToCards(+pa.dataset.phAdd);
+    if (e.target.closest('#rSum') || e.target.closest('#rPh')) return; // onay kutuları paneli kapatmasın
     onReaderTap(e);
   });
   bindDragSelect();
@@ -723,6 +734,11 @@ function bindReader() {
     const sp = e.target.closest('[data-speak]');
     if (sp) return speak(sp.dataset.speak);
     if (e.target.closest('#shClose')) return closeSheet();
+    if (e.target.closest('#shPh')) {
+      const ph = phraseAtSelection();
+      if (ph) { rd.sel = { b: ph.b, i0: ph.i0, i1: ph.i1 }; markSelection(); openSheet(); }
+      return;
+    }
     if (e.target.closest('#shDictBtn')) {
       const box = $('#shDict');
       box.hidden = !box.hidden;

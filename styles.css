@@ -464,3 +464,20 @@ html.dev body::after {
 .oxb.o5 { box-shadow: 0 0 0 1px var(--accent) inset; color: var(--accent-text); }
 .oxb.o5 i { background: var(--accent); color: var(--accent-ink); }
 .oxb.none { padding: 5px 9px; background: var(--surface-2); color: var(--muted); }
+/* kalıplar: metinde noktalı alt çizgi (mavi), Oxford'un düz alt çizgisinden ayrışsın */
+.r-body .w.ph, .r-body .ph-gap { text-decoration: underline dotted; text-decoration-color: var(--easy); text-decoration-thickness: 2px; text-underline-offset: 5px; text-decoration-skip-ink: none; }
+.ph-chip { display: flex; align-items: center; gap: var(--s2); width: 100%; text-align: left; margin: 0 0 var(--s2); padding: var(--s2) var(--s3); border-radius: var(--r-m); background: color-mix(in srgb, var(--easy) 12%, transparent); color: var(--text); font-size: var(--fs-2); border: 1px dashed color-mix(in srgb, var(--easy) 60%, transparent); }
+.ph-chip svg { color: var(--easy); flex: none; }
+.ph-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s3); }
+.ph-list li { display: flex; align-items: center; gap: var(--s2); justify-content: space-between; }
+.ph-txt { min-width: 0; }
+.ph-list .lv { margin-left: 4px; }
+.ph-add { color: var(--accent-text); flex: none; }
+.r-ph[hidden] { display: none; }
+/* kartlar: başka yerlerde görülme */
+.hits { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: var(--r-pill); background: color-mix(in srgb, var(--good) 16%, transparent); color: var(--good); }
+.seen-n { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 600; color: var(--good); }
+.sights { display: flex; flex-direction: column; gap: var(--s2); }
+.sight { border-left: 3px solid color-mix(in srgb, var(--good) 45%, transparent); padding-left: var(--s3); }
+.sight p { margin: 0 0 2px; }
+.sight mark { background: color-mix(in srgb, var(--good) 22%, transparent); color: inherit; border-radius: 3px; padding: 0 2px; }
