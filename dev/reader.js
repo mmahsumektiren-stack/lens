@@ -79,7 +79,7 @@ function knownSet() {
   const set = new Set();
   for (const c of cards) {
     const t = c.term.trim().toLowerCase();
-    if (!/\s/.test(t)) lemmaCandidates(t).forEach((x) => set.add(x));
+    if (!/\s/.test(t)) set.add(normWord(t)); // yalnız kartın kendi biçimi: "had"/"been" kartı "was", "is" kelimelerini bilinen yapmaz
   }
   return set;
 }
