@@ -502,3 +502,12 @@ html.dev body::after {
 .oxb.o3 { box-shadow: 0 0 0 1px var(--easy) inset; color: var(--easy); }
 .oxb.o3 i { background: var(--easy); color: var(--bg); }
 .reveal { display: flex; flex-direction: column; gap: var(--s3); padding-top: var(--s1); }
+/* okuyucu paneli: daha önce gördüğün yerler */
+.seen-btn { display: flex; align-items: center; gap: var(--s2); width: 100%; margin: 0 0 var(--s2); padding: var(--s2) var(--s3); border-radius: var(--r-m); background: color-mix(in srgb, var(--good) 12%, transparent); color: var(--text); font-size: var(--fs-2); text-align: left; }
+.seen-btn svg:first-child { color: var(--good); flex: none; }
+.seen-btn span { flex: 1; }
+.seen-btn b { font-size: var(--fs-1); padding: 2px 8px; border-radius: var(--r-pill); background: var(--good); color: var(--bg); }
+.seen-btn > svg:last-child { color: var(--muted); transition: transform .2s; flex: none; }
+.seen-btn.open > svg:last-child { transform: rotate(180deg); }
+.seen-list { display: flex; flex-direction: column; gap: var(--s3); margin: 0 0 var(--s3); max-height: 40vh; overflow-y: auto; }
+.seen-list .first { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: var(--r-pill); background: var(--surface-2); color: var(--muted); }
