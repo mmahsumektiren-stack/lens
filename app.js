@@ -694,6 +694,7 @@ async function grade(g) {
 /* ----- Kartlar listesi ----- */
 const openItems = new Set();
 const openDicts = new Set();
+const openReveal = new Set(); // anlamı açılmış kartlar; kart kapanınca sıfırlanır (kendini yoklamak için)
 function renderList() {
   const q = $('#search').value.trim().toLowerCase();
   const list = cards
@@ -709,7 +710,7 @@ function renderList() {
     <li class="item" data-id="${c.id}">
       <div class="head" data-toggle="${c.id}">
         <div><div class="t">${esc(c.term)}</div>
-          <div class="m">${c.sightings?.length ? `<span class="seen-n" title="Başka yerlerde gördün">${icon('eye', 12)}${c.sightings.length}</span> ` : ''}${c.status === 'ready' ? esc(c.ai.meaning_tr) + (c.ai.basic ? ' <span class="tag-pending">temel</span>' : '') : '<span class="tag-pending">AI bekliyor</span>'}</div></div>
+          <div class="m">${c.sightings?.length ? `<span class="seen-n" title="Başka yerlerde gördün">${icon('eye', 12)}${c.sightings.length}</span> ` : ''}${oxCardHTML(c)}${c.status === 'ready' ? (c.ai.basic ? ' <span class="tag-pending">temel</span>' : '') : ' <span class="tag-pending">AI bekliyor</span>'}</div></div>
         <div class="side">
           <div class="due">${esc(fmtAdded(c.createdAt))}</div>
           <button class="icon-btn del-btn" data-act="del" data-id="${c.id}" aria-label="Kartı sil">${icon('trash', 18)}</button>
@@ -717,8 +718,8 @@ function renderList() {
       </div>
       <div class="detail" ${openItems.has(c.id) ? '' : 'hidden'}>
         ${c.tweet ? tweetHTML(c.tweet, highlight(c.tweet.text, c.term)) : c.context && c.context !== c.term ? `<div class="ctx">${highlight(c.context, c.term)}</div>` : ''}
-        ${c.status === 'ready' ? detailHTML(c) : ''}
-        ${c.status === 'ready' ? `<div class="sub">Sonraki tekrar: ${esc(fmtDue(c.srs.due))}</div>` : ''}
+        ${c.status === 'ready' ? `<button class="reveal-btn${openReveal.has(c.id) ? ' open' : ''}" data-act="reveal" data-id="${c.id}" aria-expanded="${openReveal.has(c.id)}" aria-label="${openReveal.has(c.id) ? 'Anlamı gizle' : 'Anlamı göster'}"><span class="rv-line"></span><span class="rv-dot">${icon('down', 20)}</span><span class="rv-line"></span></button>
+          ${openReveal.has(c.id) ? `<div class="reveal">${detailHTML(c)}</div>` : ''}` : ''}
         <div class="item-acts">
           <div class="pair">
             <button class="ghost act${openDicts.has(c.id) ? ' on' : ''}" data-act="dict" data-id="${c.id}">${icon('dict', 18)}<span>Sözlük</span></button>
@@ -832,6 +833,8 @@ function bind() {
         await DB.del(c.id);
         cards = cards.filter((x) => x.id !== c.id);
         toast('Silindi');
+      } else if (act.dataset.act === 'reveal') {
+        openReveal.has(c.id) ? openReveal.delete(c.id) : openReveal.add(c.id);
       } else if (act.dataset.act === 'dict') {
         openDicts.has(c.id) ? openDicts.delete(c.id) : openDicts.add(c.id);
       } else if (act.dataset.act === 'regen') {
@@ -846,7 +849,7 @@ function bind() {
     const head = e.target.closest('[data-toggle]');
     if (head) {
       const id = head.dataset.toggle;
-      openItems.has(id) ? openItems.delete(id) : openItems.add(id);
+      if (openItems.has(id)) { openItems.delete(id); openReveal.delete(id); } else openItems.add(id);
       renderList();
     }
   });
@@ -1158,6 +1161,7 @@ function handleLaunchParams() {
   } catch (e) {
     toast('Depolama açılamadı: ' + e.message, 5000);
   }
+  await loadOxford(); // kart satırlarındaki Oxford etiketi için
   refreshBadges();
   handleLaunchParams();
   enrichPending();
