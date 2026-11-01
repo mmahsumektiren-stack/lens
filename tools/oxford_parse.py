@@ -19,6 +19,9 @@ IRREG_N = 'men:man|women:woman|children:child|feet:foot|teeth:tooth|mice:mouse|g
 IRREG_A = 'better best:good|better best:well|worse worst:bad|further furthest farther farthest:far|more most:many|more most:much|less least:little|elder eldest:old'
 
 
+POSLVL = collections.defaultdict(dict)  # kelime → {tür: en düşük seviye}  (close: v. A1, adj. A2, adv. B1, n. B2)
+
+
 def parse(files):
     heads, pos = {}, collections.defaultdict(set)
     bad = []
@@ -40,6 +43,8 @@ def parse(files):
                 if not w: continue
                 if w not in heads or RANK[lvl] < heads[w]: heads[w] = RANK[lvl]
                 pos[w] |= tags
+                for t in tags:
+                    if t not in POSLVL[w] or RANK[lvl] < POSLVL[w][t]: POSLVL[w][t] = RANK[lvl]
     return heads, pos, bad
 
 
@@ -167,4 +172,6 @@ if __name__ == '__main__':
     print(src, 'heads', len(heads), '3000', len(in3), '5000-only', len(only5), 'forms', len(forms), 'unparsed', len(bad), bad[:10])
     out = os.environ.get('OUT', 'oxford.json')
     # x: yalnız Oxford 5000'de olan başlıklar (geri kalanı Oxford 3000)
-    json.dump({'h': heads, 'f': forms, 'x': only5}, open(out, 'w'), separators=(',', ':'), sort_keys=True)
+    # p: kelime → "tür:seviye,tür:seviye" (ör. "close": "v.:1,adj.:2,adv.:3,n.:4")
+    pl = {w: ','.join(f'{t}:{l}' for t, l in sorted(d.items(), key=lambda x: x[1])) for w, d in POSLVL.items() if w in heads}
+    json.dump({'h': heads, 'f': forms, 'x': only5, 'p': pl}, open(out, 'w'), separators=(',', ':'), sort_keys=True)

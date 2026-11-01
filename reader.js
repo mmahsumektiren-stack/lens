@@ -8,21 +8,39 @@
    (structures → structure, stopped → stop, bigger → big, children → child). Türetmeler (-ly, -ness, "yapan" -er)
    köke indirilmez: stably ≠ stab, killer ≠ kill — Oxford Text Checker da böyle çalışır. */
 const LEVELS = ['', 'A1', 'A2', 'B1', 'B2', 'C1'];
-let OX = null, OXF = {}, OX5 = new Set();
+let OX = null, OXF = {}, OX5 = new Set(), OXP = {};
 async function loadOxford() {
   if (OX) return OX;
   try {
-    const j = await (await fetch('oxford.json?v=5')).json();
-    if (j && j.h) { OX = j.h; OXF = j.f || {}; OX5 = new Set(j.x || []); } else OX = j || {}; // eski biçime karşı koruma
+    const j = await (await fetch('oxford.json?v=6')).json();
+    if (j && j.h) { OX = j.h; OXF = j.f || {}; OX5 = new Set(j.x || []); OXP = j.p || {}; } else OX = j || {}; // eski biçime karşı koruma
   } catch { OX = {}; }
   return OX;
+}
+// Oxford'un kelime türleri (ör. "v.:4,n.:4") → [{t:'fiil', l:4}, …]
+const OX_POS_TR = { 'n.': 'isim', 'v.': 'fiil', 'adj.': 'sıfat', 'adv.': 'zarf', 'prep.': 'edat', 'conj.': 'bağlaç', 'pron.': 'zamir', 'det.': 'belirteç', 'number': 'sayı', 'exclam.': 'ünlem', 'modal v.': 'yardımcı fiil', 'auxiliary v.': 'yardımcı fiil', 'linking v.': 'fiil', 'article': 'tanımlık', 'marker': 'edat' };
+function oxPos(word) {
+  return String(OXP[word] || '').split(',').filter(Boolean).map((x) => { const i = x.lastIndexOf(':'); return { t: OX_POS_TR[x.slice(0, i)] || x.slice(0, i), l: +x.slice(i + 1) }; });
+}
+// kart satırı: hangi Oxford listesi, hangi seviye, hangi tür. Kartın AI türüyle eşleşen girdinin seviyesi alınır.
+function oxCardHTML(c) {
+  const t = String(c.term || '').trim();
+  const ox = oxLookup(t);
+  if (!ox) return `<span class="oxb none">Oxford listesinde yok</span>${c.ai?.type && c.ai.type !== 'word' ? ` <span class="pos">${esc(typeLabel(c.ai.type))}</span>` : ''}`;
+  const pos = oxPos(ox.word);
+  const mine = pos.find((p) => c.ai?.pos && String(c.ai.pos).toLowerCase().startsWith(p.t));
+  const lvl = (mine || pos[0] || { l: ox.level }).l;
+  const five = OX5.has(ox.word);
+  const kinds = [...new Set(pos.map((p) => p.t))];
+  return `<span class="oxb ${five ? 'o5' : 'o3'}"><b>Oxford ${five ? '5000' : '3000'}</b><i>${LEVELS[lvl]}</i></span>${kinds.length ? ` <span class="pos">${esc(kinds.join(' · '))}</span>` : ''}${ox.word !== normWord(t) ? ` <span class="pos">“${esc(ox.word)}”</span>` : ''}`;
 }
 // alt panelde: Oxford 3000 mü, 5000 mi (5000 = 3000'e eklenen B2–C1 kelimeler), hangi seviye, hangi başlıkla
 function oxBadgeHTML(term, ox) {
   if (!ox) return ''; // listede yoksa hiçbir şey gösterme
   const five = OX5.has(ox.word);
   const base = ox.word !== normWord(term) ? `<span class="sub">“${esc(ox.word)}” olarak</span>` : '';
-  return `<div class="sh-ox"><span class="oxb ${five ? 'o5' : 'o3'}"><b>Oxford ${five ? '5000' : '3000'}</b><i>${LEVELS[ox.level]}</i></span>${base}</div>`;
+  const kinds = [...new Set(oxPos(ox.word).map((p) => p.t))];
+  return `<div class="sh-ox"><span class="oxb ${five ? 'o5' : 'o3'}"><b>Oxford ${five ? '5000' : '3000'}</b><i>${LEVELS[ox.level]}</i></span>${kinds.length ? `<span class="pos">${esc(kinds.join(' · '))}</span>` : ''}${base}</div>`;
 }
 function normWord(w) {
   w = w.toLowerCase().replace(/[’]/g, "'").replace(/'s$/, '').replace(/'$/, '');

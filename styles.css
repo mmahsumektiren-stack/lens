@@ -481,3 +481,12 @@ html.dev body::after {
 .sight { border-left: 3px solid color-mix(in srgb, var(--good) 45%, transparent); padding-left: var(--s3); }
 .sight p { margin: 0 0 2px; }
 .sight mark { background: color-mix(in srgb, var(--good) 22%, transparent); color: inherit; border-radius: 3px; padding: 0 2px; }
+/* kartlar: kapalıyken Oxford etiketi, açıkken anlam gizli */
+.item .m { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.item .m .oxb { font-size: 11px; }
+.item .m .oxb b, .item .m .oxb i { padding: 4px 7px; }
+.item .m .oxb.none { padding: 4px 8px; }
+.pos { font-size: var(--fs-1); color: var(--muted); }
+.sh-ox .pos { font-size: var(--fs-1); }
+.reveal-btn { display: flex; align-items: center; justify-content: center; gap: var(--s2); width: 100%; padding: var(--s3); border-radius: var(--r-m); background: var(--surface-2); color: var(--text); font-weight: 600; font-size: var(--fs-2); }
+.reveal { display: flex; flex-direction: column; gap: var(--s3); padding-top: var(--s1); }
