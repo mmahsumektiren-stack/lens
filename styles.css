@@ -488,5 +488,17 @@ html.dev body::after {
 .item .m .oxb.none { padding: 4px 8px; }
 .pos { font-size: var(--fs-1); color: var(--muted); }
 .sh-ox .pos { font-size: var(--fs-1); }
-.reveal-btn { display: flex; align-items: center; justify-content: center; gap: var(--s2); width: 100%; padding: var(--s3); border-radius: var(--r-m); background: var(--surface-2); color: var(--text); font-weight: 600; font-size: var(--fs-2); }
+.reveal-btn { display: flex; align-items: center; gap: var(--s3); width: 100%; padding: var(--s1) 0; background: none; color: var(--accent-text); }
+.reveal-btn .rv-line { flex: 1; height: 1px; background: var(--line); }
+.reveal-btn .rv-dot { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 1px 3px rgb(0 0 0 / .08); transition: transform .2s ease, background .2s; }
+.reveal-btn .rv-dot svg { transition: transform .25s ease; }
+.reveal-btn.open .rv-dot { background: color-mix(in srgb, var(--accent) 18%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+.reveal-btn.open .rv-dot svg { transform: rotate(180deg); }
+.reveal-btn:active .rv-dot { transform: scale(.92); }
+.oxl { font-size: 11px; font-weight: 700; padding: 3px 7px; border-radius: var(--r-pill); line-height: 1; }
+.oxl.o3 { background: var(--easy); color: var(--bg); }
+.oxl.o5 { background: var(--accent); color: var(--accent-ink); }
+.sh-ox .oxl { font-size: var(--fs-1); padding: 5px 9px; }
+.oxb.o3 { box-shadow: 0 0 0 1px var(--easy) inset; color: var(--easy); }
+.oxb.o3 i { background: var(--easy); color: var(--bg); }
 .reveal { display: flex; flex-direction: column; gap: var(--s3); padding-top: var(--s1); }

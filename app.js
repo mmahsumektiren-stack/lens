@@ -718,7 +718,7 @@ function renderList() {
       </div>
       <div class="detail" ${openItems.has(c.id) ? '' : 'hidden'}>
         ${c.tweet ? tweetHTML(c.tweet, highlight(c.tweet.text, c.term)) : c.context && c.context !== c.term ? `<div class="ctx">${highlight(c.context, c.term)}</div>` : ''}
-        ${c.status === 'ready' ? `<button class="reveal-btn" data-act="reveal" data-id="${c.id}" aria-expanded="${openReveal.has(c.id)}">${icon(openReveal.has(c.id) ? 'up' : 'down', 18)}<span>${openReveal.has(c.id) ? 'Anlamı gizle' : 'Anlamı ve örnekleri göster'}</span></button>
+        ${c.status === 'ready' ? `<button class="reveal-btn${openReveal.has(c.id) ? ' open' : ''}" data-act="reveal" data-id="${c.id}" aria-expanded="${openReveal.has(c.id)}" aria-label="${openReveal.has(c.id) ? 'Anlamı gizle' : 'Anlamı göster'}"><span class="rv-line"></span><span class="rv-dot">${icon('down', 20)}</span><span class="rv-line"></span></button>
           ${openReveal.has(c.id) ? `<div class="reveal">${detailHTML(c)}</div>` : ''}` : ''}
         ${c.status === 'ready' ? `<div class="sub">Sonraki tekrar: ${esc(fmtDue(c.srs.due))}</div>` : ''}
         <div class="item-acts">
