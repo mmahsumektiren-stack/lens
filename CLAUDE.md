@@ -14,9 +14,14 @@ uygulaması var: **Lens Seçim** (paylaş menüsü, sayfa getirme).
   `dev`'i `origin/main` ile hizala ve push. "teste yükle" derse yalnız `dev`'e push (Lens Test'e gider).
 - **"Önce göster / onaylayınca yükle" derse:** değişikliği yap, test et, Playwright ekran görüntüsünü gönder, **push etme**
   (dev'e de etme — dev de Lens Test'i günceller). "Yükle/ok" deyince canlıya al.
-- Her yayından önce: `python3 tools/bump.py` (sürüm numarası; yoksa telefon eski dosyaları kullanır) ve `python3 tests/run_all.py`.
-- Yayından sonra Pages derlemesini doğrula: `gh api repos/mmahsumektiren-stack/lens/commits/<sha>/check-runs` → `deploy: success`.
-  Bir derleme "cancelled" görünürse genelde sonraki commit (dev-preview) onu geçmiştir; en son `main` commit'ine bak.
+- Her yayından önce: `python3 tools/bump.py` (sürüm numarası; yoksa telefon eski dosyaları kullanır) ve testler.
+- **Testler (token tasarrufu — MME'nin isteği):** küçük işte (yazı, renk, tek ekrandaki düzeltme) yalnız ilgili testler:
+  `python3 tests/run_all.py <ad> …` (dokunduğun ekranın/dosyanın testleri + yeni eklediğin test). Ortak koda (`app.js` depolama/
+  açılış, `reader.js` Oxford/eşleştirme, `cardIndex`, script sırası, `sw.js`, `index.html`) dokunan büyük değişiklikte hepsi:
+  `python3 tests/run_all.py`. Yalnız not/doküman değiştiyse test gerekmez. Kullanıcıya test sonucunu yazma; yalnız bir şey bozulursa söyle.
+- **Derleme kontrolü (sade):** yayından sonra tek kez bak: `gh api repos/mmahsumektiren-stack/lens/commits/main/check-runs` →
+  `deploy: success`. Bitmemişse bekleme/döngü kurma; "birkaç dakika içinde gelir" de. Yalnız `failure` görürsen ilgilen
+  ("cancelled" genelde sonraki commit'in (dev-preview) onu geçtiği anlamına gelir).
 - Kullanıcıya her yayından sonra: "Lens'i iki kez kapatıp aç" (service worker güncellemesi). Yalnız Android tarafı değiştiyse yeni APK gerekir.
 - **APK imza şifresini (`KS_PASS`) asla yazma/tekrarlama.** Repo secret'ında duruyor.
 - Commit/PR mesajları Türkçe; sonda Claude atıf satırları.
