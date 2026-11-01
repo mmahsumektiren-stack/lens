@@ -481,3 +481,24 @@ html.dev body::after {
 .sight { border-left: 3px solid color-mix(in srgb, var(--good) 45%, transparent); padding-left: var(--s3); }
 .sight p { margin: 0 0 2px; }
 .sight mark { background: color-mix(in srgb, var(--good) 22%, transparent); color: inherit; border-radius: 3px; padding: 0 2px; }
+/* kartlar: kapalıyken Oxford etiketi, açıkken anlam gizli */
+.item .m { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.item .m .oxb { font-size: 11px; }
+.item .m .oxb b, .item .m .oxb i { padding: 4px 7px; }
+.item .m .oxb.none { padding: 4px 8px; }
+.pos { font-size: var(--fs-1); color: var(--muted); }
+.sh-ox .pos { font-size: var(--fs-1); }
+.reveal-btn { display: flex; align-items: center; gap: var(--s3); width: 100%; padding: var(--s1) 0; background: none; color: var(--accent-text); }
+.reveal-btn .rv-line { flex: 1; height: 1px; background: var(--line); }
+.reveal-btn .rv-dot { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 1px 3px rgb(0 0 0 / .08); transition: transform .2s ease, background .2s; }
+.reveal-btn .rv-dot svg { transition: transform .25s ease; }
+.reveal-btn.open .rv-dot { background: color-mix(in srgb, var(--accent) 18%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+.reveal-btn.open .rv-dot svg { transform: rotate(180deg); }
+.reveal-btn:active .rv-dot { transform: scale(.92); }
+.oxl { font-size: 11px; font-weight: 700; padding: 3px 7px; border-radius: var(--r-pill); line-height: 1; }
+.oxl.o3 { background: var(--easy); color: var(--bg); }
+.oxl.o5 { background: var(--accent); color: var(--accent-ink); }
+.sh-ox .oxl { font-size: var(--fs-1); padding: 5px 9px; }
+.oxb.o3 { box-shadow: 0 0 0 1px var(--easy) inset; color: var(--easy); }
+.oxb.o3 i { background: var(--easy); color: var(--bg); }
+.reveal { display: flex; flex-direction: column; gap: var(--s3); padding-top: var(--s1); }
