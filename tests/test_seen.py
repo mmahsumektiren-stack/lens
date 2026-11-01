@@ -21,7 +21,7 @@ with sync_playwright() as p:
       const art=(id,url,title,site,text)=>({id,url,title,site,byline:'',published:'',image:'',blocks:text.split('\\n').map(t=>({t:'p',text:t})),words:50,minutes:1,createdAt:n,progress:0,scrollY:0,trans:{}});
       await DB.put(art('A1','https://bbc.com/a','Security audit','bbc.com','The firm is conducting a security audit of all systems.'),'articles');
       await DB.put(art('A2','https://breakingnewsenglish.com/p','Pilot Fatigue','breakingnewsenglish.com','A new report has raised serious concerns. The ECA conducted a survey of nearly 7,200 pilots across 32 countries.'),'articles');
-      await DB.put({id:'k1',term:'conducting',context:'The firm is conducting a security audit of all systems.',source:'https://bbc.com/a',article:{id:'A1',title:'Security audit',site:'bbc.com'},status:'ready',createdAt:n-3*D,srs:{due:n+9e8,ease:2.5,interval:3,reps:2},ai:{meaning_tr:'yürütmek',pos:'fiil',explanation_tr:'x',examples:[],synonyms:[]},
+      await DB.put({id:'k1',term:'conduct',context:'The firm is conducting a security audit of all systems.',source:'https://bbc.com/a',article:{id:'A1',title:'Security audit',site:'bbc.com'},status:'ready',createdAt:n-3*D,srs:{due:n+9e8,ease:2.5,interval:3,reps:2},ai:{meaning_tr:'yürütmek',pos:'fiil',explanation_tr:'x',examples:[],synonyms:[]},
         sightings:[{s:'Police conducted a search of the house.',w:'conducted',aid:'',url:'https://reuters.com/x',title:'Search',site:'reuters.com',at:n-D}]});
       cards=await DB.all(); await loadArticles(); }""")
     pg.evaluate("openArticle('A2')"); pg.wait_for_selector('.r-text .w')
