@@ -566,7 +566,8 @@ async function openSheet() {
   const { term, sentence } = selectionInfo();
   const single = !/\s/.test(term);
   const ox = single ? oxLookup(term) : null;
-  const inCards = cards.find((c) => c.term.toLowerCase() === term.toLowerCase());
+  const exact = cards.find((c) => c.term.toLowerCase() === term.toLowerCase());
+  const inCards = cardForWord(term); // conducted → "conducting" kartı da sayılır
   const sh = $('#sheet');
   sh.hidden = false;
   document.body.classList.add('sheet-open');
@@ -578,6 +579,7 @@ async function openSheet() {
       <button class="sh-x icon-btn" id="shClose" aria-label="Kapat">${icon('close', 20)}</button>
     </div>
     ${single ? oxBadgeHTML(term, ox) : ''}
+    ${inCards ? seenPlacesHTML(inCards) : ''}
     ${(() => { const ph = phraseAtSelection(); return ph ? `<button class="ph-chip" id="shPh">${icon('phrase', 16)}<span>Kalıbın parçası: <b>${esc(ph.p.base)}</b>${ph.p.meaning_tr ? ' — ' + esc(ph.p.meaning_tr) : ''}</span></button>` : ''; })()}
     <div class="sub sh-ipa"></div>
     <div id="shBody" class="sh-body"><div class="sub">${settings.apiKey ? 'Anlam getiriliyor…' : 'Anlam için Ayarlar’dan Gemini anahtarı ekle.'}</div></div>
@@ -593,7 +595,7 @@ async function openSheet() {
   if (!settings.apiKey) return;
   const key = term.toLowerCase() + '|' + sentence;
   try {
-    let ai = rd.cache.get(key) || (inCards?.ai ?? null);
+    let ai = rd.cache.get(key) || (exact?.ai ?? null);
     if (!ai) ai = await askGemini(term, sentence);
     rd.cache.set(key, ai);
     updateEndSummary(); // yazı sonu listesinde anlamı göster
@@ -636,7 +638,7 @@ function closeSheet() {
 async function addSelectionToCards() {
   const { term, sentence } = selectionInfo();
   const a = rd.art;
-  const dup = cards.find((c) => c.term.toLowerCase() === term.toLowerCase());
+  const dup = cardForWord(term);
   if (dup) {
     dup.srs.due = Math.min(dup.srs.due, now());
     dup.seen = (dup.seen || 1) + 1;
@@ -757,6 +759,15 @@ function bindReader() {
     const sp = e.target.closest('[data-speak]');
     if (sp) return speak(sp.dataset.speak);
     if (e.target.closest('#shClose')) return closeSheet();
+    if (e.target.closest('#shSeen')) {
+      const box = $('#shSeenList');
+      box.hidden = !box.hidden;
+      e.target.closest('#shSeen').classList.toggle('open', !box.hidden);
+      if (!box.hidden) box.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    const oa = e.target.closest('[data-open-art]');
+    if (oa) { e.preventDefault(); closeSheet(); return openArticle(oa.dataset.openArt); }
     if (e.target.closest('#shPh')) {
       const ph = phraseAtSelection();
       if (ph) { rd.sel = { b: ph.b, i0: ph.i0, i1: ph.i1 }; markSelection(); openSheet(); }

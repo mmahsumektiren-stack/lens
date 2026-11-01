@@ -370,3 +370,34 @@ function phraseAtSelection() {
   if (s === i0 && e === i1 && i0 !== i1) return null; // zaten kalıbın tamamı seçili
   return { p: a.phrases[pi], b, i0: s, i1: e };
 }
+
+/* ---------- okurken: bu kelimeyi daha önce nerelerde gördün ---------- */
+// karttaki kelime: önce birebir, sonra aynı kökten (conducted ↔ conducting); kalıplar birebir
+function cardForWord(term) {
+  const t = normalizeText(term).toLowerCase();
+  const exact = cards.find((c) => c.term.trim().toLowerCase() === t);
+  if (exact || /\s/.test(t)) return exact || null;
+  const idx = cardIndex();
+  return lemmaCandidates(t).map((k) => idx.single.get(k)).find(Boolean) || null;
+}
+// kartın özgün cümlesi + sonradan rastlanan cümleler (şu an okunan yazı hariç)
+function seenPlaces(c) {
+  const cur = rd.art;
+  const libId = (url) => (url ? articles.find((a) => a.url && normUrl(a.url) === normUrl(url))?.id : null);
+  const out = [];
+  if (c.context && normalizeText(c.context) !== normalizeText(c.term)) {
+    const aid = c.article?.id || libId(c.source);
+    out.push({ s: c.tweet?.text && c.context.length < 20 ? c.tweet.text : c.context, w: c.term, aid, url: c.source || c.tweet?.url || '',
+      site: c.article?.site || (c.tweet ? 'x.com' + (c.tweet.handle ? ' · @' + c.tweet.handle : '') : hostOf(c.source || '')), at: c.createdAt, first: true });
+  }
+  for (const x of c.sightings || []) out.push({ ...x, aid: x.aid && articles.some((a) => a.id === x.aid) ? x.aid : libId(x.url) });
+  return out.filter((x) => !cur || (x.aid !== cur.id && !(x.url && cur.url && normUrl(x.url) === normUrl(cur.url))));
+}
+function seenPlacesHTML(c) {
+  const P = seenPlaces(c);
+  if (!P.length) return '';
+  const label = c.term.toLowerCase() === (selectionInfo().term || '').toLowerCase() ? 'Daha önce gördüğün yerler' : `“${esc(c.term)}” kartın · gördüğün yerler`;
+  return `<button class="seen-btn" id="shSeen">${icon('eye', 16)}<span>${label}</span><b>${P.length}</b>${icon('down', 16)}</button>
+    <div id="shSeenList" class="seen-list" hidden>${P.map((x) => `<div class="sight"><p>${highlight(x.s, x.w || c.term)}</p>
+      <div class="sub">${x.first ? '<span class="first">ilk</span> ' : ''}${x.aid ? `<a href="#" data-open-art="${esc(x.aid)}">${icon('article', 14)} ${esc(x.site || x.title || 'yazıyı aç')}</a>` : x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.site || x.title || 'kaynak')} ${icon('external', 12)}</a>` : esc(x.site || '')}${x.at ? ' · ' + esc(fmtAdded(x.at)) : ''}</div></div>`).join('')}</div>`;
+}
