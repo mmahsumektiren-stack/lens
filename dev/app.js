@@ -1162,6 +1162,7 @@ function handleLaunchParams() {
     toast('Depolama açılamadı: ' + e.message, 5000);
   }
   await loadOxford(); // kart satırlarındaki Oxford etiketi için
+  await pruneSightings().catch(() => {});
   refreshBadges();
   handleLaunchParams();
   enrichPending();

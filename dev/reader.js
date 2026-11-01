@@ -567,7 +567,7 @@ async function openSheet() {
   const single = !/\s/.test(term);
   const ox = single ? oxLookup(term) : null;
   const exact = cards.find((c) => c.term.toLowerCase() === term.toLowerCase());
-  const inCards = cardForWord(term); // conducted → "conducting" kartı da sayılır
+  const inCards = cardForWord(term); // conducted → "conduct" kartı da sayılır
   const sh = $('#sheet');
   sh.hidden = false;
   document.body.classList.add('sheet-open');
