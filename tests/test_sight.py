@@ -27,5 +27,7 @@ with sync_playwright() as p:
     got=pg.evaluate("Object.fromEntries(cards.map(c=>[c.term,(c.sightings||[]).map(s=>s.w)]))")
     print('rastlamalar:', got)
     assert got['had']==['had'], got; assert got['have']==['having'], got; assert got['brake']==['brakes'], got
+    kn=pg.evaluate("(()=>{const k=knownSet();return ['had','was','been','is','having','brakes'].filter(w=>lemmaCandidates(w).some(x=>k.has(x)))})()")
+    print('bilinen (yeşil):', kn); assert kn==['had','having','brakes'], kn  # kartlar: had, have, brake — "was", "is" değil
     b.close()
 srv.terminate(); print('errs',errs)

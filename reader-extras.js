@@ -139,7 +139,7 @@ async function addLookedToCards() {
 }
 
 /* ---------- zorluk etiketi ---------- */
-const DIFF_V = 3;
+const DIFF_V = 4;
 function computeDifficulty(a) {
   const counts = [0, 0, 0, 0, 0, 0, 0]; // 1..5 = A1..C1, 6 = listede yok
   const hard = new Set();
