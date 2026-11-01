@@ -33,7 +33,7 @@ jobs:
         run: |
           rm -rf site/dev && mkdir -p site/dev
           rsync -a --exclude '.git' --exclude '.github' --exclude 'android' --exclude 'tools' \
-                --exclude 'dev' --exclude 'README.md' src/ site/dev/
+                --exclude 'dev' --exclude 'tests' --exclude 'CLAUDE.md' --exclude 'README.md' src/ site/dev/
           python3 - <<'PY'
           import json
           p = 'site/dev/manifest.webmanifest'
