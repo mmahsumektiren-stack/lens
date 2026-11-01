@@ -257,25 +257,18 @@ function sightingsHTML(c) {
 /* ---------- yazıdaki kalıplar (Gemini) ----------
    Yazı açılınca bir kez: öğrenmeye değer kalıplar, phrasal verb'ler, deyimler. Metinde noktalı alt çizgiyle işaretlenir,
    kelime panelinde "bu kelime bir kalıbın parçası" olarak önerilir, yazı sonunda liste halinde karta eklenebilir. */
-const PH_V = 2; // talimat değişince eski sonuçlar yeniden hesaplanır
+const PH_V = 3; // talimat değişince eski sonuçlar yeniden hesaplanır
+const PH_TYPES = ['phrasal_verb', 'idiom'];
 const phrasesTried = new Set();
 function phrasePrompt(text) {
-  return `You help a Turkish learner (B1–C1) read English. Find the multi-word expressions in the text below that are worth learning AS A UNIT.
+  return `You help a Turkish learner (B1–C1) read English. Find in the text below ONLY these two kinds of multi-word expressions:
+1. phrasal verbs: verb + particle(s) with their own meaning (e.g. "put off", "come up with", "run out of", "give in")
+2. idioms: expressions whose meaning cannot be understood from the separate words (e.g. "cut corners", "put the brakes on", "on the fence", "the ball is in your court")
 
-INCLUDE only:
-- phrasal verbs (e.g. "put off", "come up with", "run out of")
-- idioms whose meaning is not the sum of the words (e.g. "cut corners", "put the brakes on", "on the fence")
-- fixed / conventional expressions a learner would not build on their own (e.g. "keep someone posted", "thank you for your patience", "at the end of the day", "by and large")
-- strong collocations where the word choice is not predictable (e.g. "make a decision" not "do a decision", "heavy rain", "pay attention")
-
-EXCLUDE (these are NOT expressions, never list them):
-- transparent combinations whose meaning is obvious from the separate words: "security issue", "fully resolve", "remain safe", "conduct security checks", "new feature", "very important", "start working"
-- adjective + noun or adverb + verb pairs that are just ordinary grammar
-- proper names, product names, single words
-
-Be strict: if unsure, leave it out. Returning 0–3 items is normal; an empty list is fine. Never pad the list. Maximum 8.
-"text" MUST be copied exactly as it appears in the text (same inflection, same words). "base" is the dictionary form (e.g. "keep someone updated").
-Return JSON: {"phrases":[{"text":"…","base":"…","type":"phrasal_verb|idiom|expression|collocation","meaning_tr":"kısa Türkçe anlam (base biçimine göre)","level":"B1|B2|C1|C2"}]}
+List NOTHING else: no collocations, no fixed polite phrases ("thank you for your patience", "keep you updated"), no ordinary word combinations ("security issue", "fully resolve"), no literal verb + preposition ("go to the store", "look at the screen"), no proper names.
+Be strict: if unsure, leave it out. An empty list is normal and fine. Never pad the list. Maximum 8.
+"text" MUST be copied exactly as it appears in the text (same inflection, same words). "base" is the dictionary form (e.g. "put the brakes on").
+Return JSON: {"phrases":[{"text":"…","base":"…","type":"phrasal_verb|idiom","meaning_tr":"kısa Türkçe anlam (base biçimine göre)","level":"B1|B2|C1|C2"}]}
 
 TEXT:
 ${text}`;
@@ -293,7 +286,7 @@ async function ensurePhrases(a) {
     const seen = new Set();
     list = (j.phrases || []).filter((p) => p && p.text && /\s/.test(p.text.trim()))
       .map((p) => ({ text: p.text.trim().replace(/[’]/g, "'"), base: (p.base || p.text).trim(), type: p.type || 'expression', meaning_tr: p.meaning_tr || '', level: p.level || '' }))
-      .filter((p) => low.includes(p.text.toLowerCase()) && !seen.has(p.base.toLowerCase()) && seen.add(p.base.toLowerCase()))
+      .filter((p) => PH_TYPES.includes(p.type) && low.includes(p.text.toLowerCase()) && !seen.has(p.base.toLowerCase()) && seen.add(p.base.toLowerCase()))
       .slice(0, 8);
   } catch (e) {
     a.phErr = friendlyGeminiError(e);
@@ -334,7 +327,7 @@ function phrasesHTML(a) {
     <ul class="ph-list">${a.phrases.map((p, i) => {
       const inCards = !!cardFor(p.base) || !!cardFor(p.text);
       return `<li><div class="ph-txt"><b>${esc(p.base)}</b>${p.level ? ` <span class="lv">${esc(p.level)}</span>` : ''}
-          <div class="sub">${esc(typeLabel(p.type === 'collocation' || p.type === 'expression' ? 'phrase' : p.type))}${p.meaning_tr ? ' — ' + esc(p.meaning_tr) : ''}</div></div>
+          <div class="sub">${esc(typeLabel(p.type))}${p.meaning_tr ? ' — ' + esc(p.meaning_tr) : ''}</div></div>
         ${inCards ? `<span class="sub in-cards">${icon('check', 13)}kartlarında</span>` : `<button class="icon-btn ph-add" data-ph-add="${i}" aria-label="Kartlara ekle">${icon('plus', 20)}</button>`}</li>`;
     }).join('')}</ul>`;
 }
