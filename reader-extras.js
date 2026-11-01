@@ -196,7 +196,7 @@ function cardIndex() {
     const t = normalizeText(c.term).toLowerCase();
     if (!t || t.length < 2) continue;
     if (/\s/.test(t)) { if (t.split(/\s+/).length <= 6) multi.push([t, c]); }
-    else lemmaCandidates(t).forEach((k) => { if (!single.has(k)) single.set(k, c); });
+    else if (!single.has(t)) single.set(t, c); // yalnız kartın kendi biçimi: "had" kartı "having"i, "have"i almaz
   }
   return (cardIdxCache = { key, single, multi });
 }
@@ -217,7 +217,9 @@ function cardHits(a) {
   const texts = (a.blocks || []).filter((b) => b.text && b.t !== 'img').map((b) => b.text);
   for (const s of texts.flatMap(splitSentences)) {
     for (const m of s.matchAll(/[A-Za-z][A-Za-z'’-]*/g)) {
-      const c = lemmaCandidates(m[0]).map((k) => idx.single.get(k)).find(Boolean);
+      // metindeki kelime kartın kendisi ya da kartın (kök) çekimi olmalı: brake → brakes, have → had; had ↛ having
+      const lw = normWord(m[0]);
+      const c = idx.single.get(lw) || lemmaCandidates(lw).map((k) => idx.single.get(k)).find(Boolean);
       if (c) add(c, s, m[0]);
     }
     const low = s.toLowerCase();
@@ -243,6 +245,20 @@ async function recordSightings(a) {
     c.sightings.unshift({ s: h.s, w: h.w, aid: a.id, url: a.url || '', title: a.title || '', site: a.site || '', at: now() });
     if (c.sightings.length > SIGHT_MAX) c.sightings.length = SIGHT_MAX;
     await saveCard(c);
+  }
+}
+// metindeki biçim karta uyuyor mu (eski kurala göre kaydedilmiş yanlış rastlamaları ayıklamak için)
+function sightFits(c, w) {
+  const t = normalizeText(c.term).toLowerCase();
+  if (!w || /\s/.test(t)) return true;
+  const lw = normWord(w);
+  return lw === t || lemmaCandidates(lw).includes(t);
+}
+async function pruneSightings() {
+  for (const c of cards) {
+    if (!c.sightings?.length) continue;
+    const keep = c.sightings.filter((x) => sightFits(c, x.w));
+    if (keep.length !== c.sightings.length) { c.sightings = keep; await saveCard(c); }
   }
 }
 function sightingsHTML(c) {
@@ -377,8 +393,8 @@ function cardForWord(term) {
   const t = normalizeText(term).toLowerCase();
   const exact = cards.find((c) => c.term.trim().toLowerCase() === t);
   if (exact || /\s/.test(t)) return exact || null;
-  const idx = cardIndex();
-  return lemmaCandidates(t).map((k) => idx.single.get(k)).find(Boolean) || null;
+  const idx = cardIndex(); // kart kökse çekimleri de sayılır (conduct → conducted); farklı zaman sayılmaz (had ↛ having)
+  return lemmaCandidates(normWord(t)).map((k) => idx.single.get(k)).find(Boolean) || null;
 }
 // kartın özgün cümlesi + sonradan rastlanan cümleler (şu an okunan yazı hariç)
 function seenPlaces(c) {
