@@ -38,7 +38,7 @@ function oxTagsHTML(word) {
 function oxCardHTML(c) {
   const t = String(c.term || '').trim();
   const ox = oxLookup(t);
-  if (!ox) return `<span class="oxb none">Oxford listesinde yok</span>`;
+  if (!ox) return ''; // listede yoksa kapalı kartta hiçbir şey yazma
   return oxTagsHTML(ox.word) + (ox.word !== normWord(t) ? `<span class="pos">“${esc(ox.word)}”</span>` : '');
 }
 // alt panelde: Oxford 3000 mü, 5000 mi (5000 = 3000'e eklenen B2–C1 kelimeler), hangi seviye, hangi başlıkla
