@@ -450,7 +450,7 @@ function show(view) {
   if (view !== 'reader' && typeof closeSheet === 'function') { closeSheet(); stopReadAloud(); }
   if (view === 'read') { setReadPane(readReturn || 'lib'); readReturn = null; renderDiscover(); renderLibrary().then(drawDiscList); }
   if (view === 'review') renderReview();
-  if (view === 'list') renderList();
+  if (view === 'list') { renderList(); if (!articles.length) loadArticles().then(() => { if (articles.length && currentView === 'list') renderList(); }); }
   if (view === 'settings') { renderSettings(); renderSourceSettings(); renderSvcLog(); }
   if (view === 'add') renderTokens();
 }
@@ -659,6 +659,31 @@ function detailHTML(c) {
     ${c.source ? `<a class="sub" href="${esc(c.source)}" target="_blank" rel="noopener">${c.article ? icon('article', 16) + ' ' + esc(c.article.title) + ' · ' + esc(c.article.site) : 'Kaynağa git'} ${icon('external', 14)}</a>` : ''}`;
 }
 
+// Kartlar ekranında "Türkçe anlamı göster" ile açılan kısım: yalnız anlam/açıklama (örnekler ve geçtiği yerler ayrı)
+function meaningHTML(c) {
+  const a = c.ai || {};
+  return `<div class="m-head"><div class="meaning">${esc(a.meaning_tr)}</div>${a.pos ? `<span class="pos-pill">${esc(a.pos)}</span>` : ''}</div>
+    ${a.explanation_tr ? `<p class="m-exp">${esc(a.explanation_tr)}</p>` : ''}
+    ${a.context_tr && c.context !== c.term ? `<div class="m-sub"><div class="sec-h"><span>Bu cümlede</span></div><p>${esc(a.context_tr)}</p></div>` : ''}
+    ${(a.key_phrases || []).length ? `<div class="m-sub"><div class="sec-h"><span>Öne çıkanlar</span></div>${a.key_phrases.map((k) => `<p><b>${esc(k.en)}</b> — ${esc(k.tr)}</p>`).join('')}</div>` : ''}
+    ${(a.synonyms || []).length ? `<div class="chips">${a.synonyms.map((s) => `<span class="chip">${esc(s)}</span>`).join('')}</div>` : ''}`;
+}
+function examplesHTML(c) {
+  const ex = c.ai?.examples || [];
+  if (!ex.length) return '';
+  return `<section class="sec"><div class="sec-h"><span>Örnekler</span><small>Türkçesi için dokun</small></div>
+    ${ex.map((x, i) => { const on = openEx.has(c.id + ':' + i); return `<div class="ex2${on ? ' on' : ''}">
+      <button class="ex-en" data-act="ex" data-id="${esc(c.id)}" data-i="${i}" aria-expanded="${on}">${esc(x.en)}</button>
+      <button class="speak" data-speak="${esc(x.en)}" aria-label="Sesli oku">${icon('speak', 16)}</button>
+      ${on && x.tr ? `<div class="ex-tr">${esc(x.tr)}</div>` : ''}</div>`; }).join('')}
+  </section>`;
+}
+function sourceHTML(c) {
+  const body = c.tweet ? tweetHTML(c.tweet, highlight(c.tweet.text, c.term)) : c.context && c.context !== c.term ? `<div class="ctx">${highlight(c.context, c.term)}</div>` : '';
+  const link = !c.tweet && c.source ? `<a class="src-link" href="${esc(c.source)}" target="_blank" rel="noopener">${c.article ? icon('article', 14) + `<span>${esc(c.article.title)} · ${esc(c.article.site)}</span>` : `<span>${esc(hostOf(c.source) || 'Kaynağa git')}</span>`}${icon('external', 12)}</a>` : '';
+  return body || link ? `<section class="sec"><div class="sec-h"><span>Kaynak</span></div>${body}${link}</section>` : '';
+}
+
 function typeLabel(t) {
   return ({ word: 'Kelime', phrase: 'Kalıp', idiom: 'Deyim', phrasal_verb: 'Phrasal verb', slang: 'Argo', sentence: 'Cümle' })[t] || 'Kart';
 }
@@ -695,6 +720,8 @@ async function grade(g) {
 const openItems = new Set();
 const openDicts = new Set();
 const openReveal = new Set(); // anlamı açılmış kartlar; kart kapanınca sıfırlanır (kendini yoklamak için)
+const openEx = new Set(); // Türkçesi açılmış örnekler (kartId:sıra)
+const openMore = new Set(); // tüm geçtiği yerleri gösterilen kartlar
 function renderList() {
   const q = $('#search').value.trim().toLowerCase();
   const list = cards
@@ -710,20 +737,22 @@ function renderList() {
     <li class="item" data-id="${c.id}">
       <div class="head" data-toggle="${c.id}">
         <div><div class="t">${esc(c.term)}</div>
-          <div class="m">${c.sightings?.length ? `<span class="seen-n" title="Başka yerlerde gördün">${icon('eye', 12)}${c.sightings.length}</span> ` : ''}${oxCardHTML(c)}${c.status === 'ready' ? (c.ai.basic ? ' <span class="tag-pending">temel</span>' : '') : ' <span class="tag-pending">AI bekliyor</span>'}</div></div>
+          <div class="m">${(n => n ? `<span class="seen-n" title="Başka yerlerde gördün">${icon('eye', 12)}${n}</span> ` : '')(allSightings(c).length)}${oxCardHTML(c)}${c.status === 'ready' ? (c.ai.basic ? ' <span class="tag-pending">temel</span>' : '') : ' <span class="tag-pending">AI bekliyor</span>'}</div></div>
         <div class="side">
           <div class="due">${esc(fmtAdded(c.createdAt))}</div>
           <button class="icon-btn del-btn" data-act="del" data-id="${c.id}" aria-label="Kartı sil">${icon('trash', 18)}</button>
         </div>
       </div>
       <div class="detail" ${openItems.has(c.id) ? '' : 'hidden'}>
-        ${c.tweet ? tweetHTML(c.tweet, highlight(c.tweet.text, c.term)) : c.context && c.context !== c.term ? `<div class="ctx">${highlight(c.context, c.term)}</div>` : ''}
-        ${c.status === 'ready' ? `<button class="reveal-btn${openReveal.has(c.id) ? ' open' : ''}" data-act="reveal" data-id="${c.id}" aria-expanded="${openReveal.has(c.id)}" aria-label="${openReveal.has(c.id) ? 'Anlamı gizle' : 'Anlamı göster'}"><span class="rv-line"></span><span class="rv-dot">${icon('down', 20)}</span><span class="rv-line"></span></button>
-          ${openReveal.has(c.id) ? `<div class="reveal">${detailHTML(c)}</div>` : ''}` : ''}
+        ${sourceHTML(c)}
+        ${sightingsHTML(c, openMore.has(c.id))}
+        ${c.status === 'ready' ? `${examplesHTML(c)}
+          <button class="reveal-btn${openReveal.has(c.id) ? ' open' : ''}" data-act="reveal" data-id="${c.id}" aria-expanded="${openReveal.has(c.id)}">${icon('eye', 18)}<span>${openReveal.has(c.id) ? 'Türkçe anlamı gizle' : 'Türkçe anlamı göster'}</span>${icon('down', 18)}</button>
+          ${openReveal.has(c.id) ? `<div class="reveal">${meaningHTML(c)}</div>` : ''}` : `<div class="sub pend-note">Anlam hazırlanıyor…</div>`}
         <div class="item-acts">
-          <div class="pair">
-            <button class="ghost act${openDicts.has(c.id) ? ' on' : ''}" data-act="dict" data-id="${c.id}">${icon('dict', 18)}<span>Sözlük</span></button>
-            <button class="ghost act" data-act="regen" data-id="${c.id}">${icon('sparkle', 18)}<span>AI’yı yenile</span></button>
+          <div class="foot">
+            <button class="foot-btn${openDicts.has(c.id) ? ' on' : ''}" data-act="dict" data-id="${c.id}">${icon('dict', 16)}<span>Sözlük</span></button>
+            <button class="foot-btn" data-act="regen" data-id="${c.id}">${icon('sparkle', 16)}<span>AI’yı yenile</span></button>
           </div>
           ${openDicts.has(c.id) ? `<div class="dict-box">${dictPanelHTML(c.term)}</div>` : ''}
         </div>
@@ -835,6 +864,11 @@ function bind() {
         toast('Silindi');
       } else if (act.dataset.act === 'reveal') {
         openReveal.has(c.id) ? openReveal.delete(c.id) : openReveal.add(c.id);
+      } else if (act.dataset.act === 'ex') {
+        const k = c.id + ':' + act.dataset.i;
+        openEx.has(k) ? openEx.delete(k) : openEx.add(k);
+      } else if (act.dataset.act === 'more') {
+        openMore.add(c.id);
       } else if (act.dataset.act === 'dict') {
         openDicts.has(c.id) ? openDicts.delete(c.id) : openDicts.add(c.id);
       } else if (act.dataset.act === 'regen') {
@@ -849,7 +883,7 @@ function bind() {
     const head = e.target.closest('[data-toggle]');
     if (head) {
       const id = head.dataset.toggle;
-      if (openItems.has(id)) { openItems.delete(id); openReveal.delete(id); } else openItems.add(id);
+      if (openItems.has(id)) { openItems.delete(id); openReveal.delete(id); openMore.delete(id); for (const k of [...openEx]) if (k.startsWith(id + ':')) openEx.delete(k); } else openItems.add(id);
       renderList();
     }
   });
