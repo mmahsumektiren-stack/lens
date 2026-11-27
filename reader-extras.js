@@ -272,9 +272,11 @@ function hitsFor(src) {
 }
 const cardText = (c) => c.tweet?.text || c.context || '';
 function allSightings(c) {
-  const seen = new Set([normalizeText(cardText(c)), normalizeText(c.context || '')].filter(Boolean));
+  const own = [cardText(c), c.context || ''].map((t) => normalizeText(t).toLowerCase()).filter(Boolean);
+  const seen = new Set();
   const out = [];
-  const push = (x) => { const k = normalizeText(x.s); if (!k || seen.has(k)) return; seen.add(k); out.push(x); };
+  // kartın kendi metninin (tweet/cümle) parçası olan cümle "başka yer" değildir: o kaynakta zaten işaretli
+  const push = (x) => { const k = normalizeText(x.s); if (!k || seen.has(k) || own.some((t) => t.includes(k.toLowerCase()))) return; seen.add(k); out.push(x); };
   for (const a of articles) {
     if (isOrigin(c, a)) continue;
     const h = hitsFor(a).get(c.id);
