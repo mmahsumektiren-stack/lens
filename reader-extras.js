@@ -261,13 +261,50 @@ async function pruneSightings() {
     if (keep.length !== c.sightings.length) { c.sightings = keep; await saveCard(c); }
   }
 }
-function sightingsHTML(c) {
-  const S = c.sightings || [];
+// kartın geçtiği tüm yerler (canlı): kütüphanedeki yazılar + diğer kartların metinleri + önceden kaydedilmiş rastlamalar.
+// Yazının okuyucuda açılmış olması gerekmez; kart, sonradan eklenen yazıları da görür.
+const hitsCache = new Map();
+function hitsFor(src) {
+  const k = src.id + '|' + cardIndex().key;
+  let m = hitsCache.get(k);
+  if (!m) hitsCache.set(k, (m = cardHits(src)));
+  return m;
+}
+const cardText = (c) => c.tweet?.text || c.context || '';
+function allSightings(c) {
+  const seen = new Set([normalizeText(cardText(c)), normalizeText(c.context || '')].filter(Boolean));
+  const out = [];
+  const push = (x) => { const k = normalizeText(x.s); if (!k || seen.has(k)) return; seen.add(k); out.push(x); };
+  for (const a of articles) {
+    if (isOrigin(c, a)) continue;
+    const h = hitsFor(a).get(c.id);
+    if (h) for (const x of h.hits) push({ s: x.s, w: x.w, aid: a.id, url: a.url || '', title: a.title || '', site: a.site || '', at: a.createdAt });
+  }
+  for (const o of cards) {
+    const t = cardText(o);
+    if (o.id === c.id || !t || normalizeText(t) === normalizeText(o.term)) continue;
+    const h = hitsFor({ id: 'card:' + o.id, blocks: [{ t: 'p', text: t }] }).get(c.id);
+    if (h) for (const x of h.hits) push({ s: x.s, w: x.w, cid: o.id, url: o.tweet?.url || o.source || '', title: o.term,
+      site: o.tweet ? (o.tweet.handle ? '@' + o.tweet.handle : 'x.com') : o.article?.site || hostOf(o.source || '') || '“' + o.term + '” kartı', at: o.createdAt });
+  }
+  for (const x of c.sightings || []) push({ ...x, aid: x.aid && articles.some((a) => a.id === x.aid) ? x.aid : '' });
+  return out.sort((a, b) => (b.at || 0) - (a.at || 0));
+}
+const SIGHT_SHOW = 3;
+function sightLine(x, c) {
+  const src = x.aid ? `<a href="#" data-open-art="${esc(x.aid)}">${icon('article', 14)}<span>${esc(x.site || x.title || 'yazıyı aç')}</span></a>`
+    : x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener"><span>${esc(x.site || x.title || 'kaynak')}</span>${icon('external', 12)}</a>`
+    : `<span>${esc(x.site || '')}</span>`;
+  return `<div class="sight"><p>${highlight(x.s, x.w || c.term)}</p><div class="sight-meta">${src}${x.at ? `<span class="dot">·</span><span>${esc(fmtAdded(x.at))}</span>` : ''}</div></div>`;
+}
+function sightingsHTML(c, all = false) {
+  const S = allSightings(c);
   if (!S.length) return '';
-  return `<div class="block sights"><div class="sub">Başka yerlerde de gördün (${S.length})</div>
-    ${S.map((x) => `<div class="sight"><p>${highlight(x.s, x.w || c.term)}</p>
-      <div class="sub">${articles.some((y) => y.id === x.aid) ? `<a href="#" data-open-art="${esc(x.aid)}">${icon('article', 14)} ${esc(x.site || x.title)}</a>` : x.url ? `<a href="${esc(x.url)}" target="_blank" rel="noopener">${esc(x.site || x.title)} ${icon('external', 12)}</a>` : esc(x.site)} · ${esc(fmtAdded(x.at))}</div></div>`).join('')}
-  </div>`;
+  const shown = all ? S : S.slice(0, SIGHT_SHOW);
+  return `<section class="sec sights"><div class="sec-h"><span>Başka yerlerde</span><b class="cnt">${S.length}</b></div>
+    ${shown.map((x) => sightLine(x, c)).join('')}
+    ${S.length > shown.length ? `<button class="more-btn" data-act="more" data-id="${esc(c.id)}">${S.length - shown.length} yer daha göster ${icon('down', 16)}</button>` : ''}
+  </section>`;
 }
 
 /* ---------- yazıdaki kalıplar (Gemini) ----------
@@ -406,7 +443,7 @@ function seenPlaces(c) {
     out.push({ s: c.tweet?.text && c.context.length < 20 ? c.tweet.text : c.context, w: c.term, aid, url: c.source || c.tweet?.url || '',
       site: c.article?.site || (c.tweet ? 'x.com' + (c.tweet.handle ? ' · @' + c.tweet.handle : '') : hostOf(c.source || '')), at: c.createdAt, first: true });
   }
-  for (const x of c.sightings || []) out.push({ ...x, aid: x.aid && articles.some((a) => a.id === x.aid) ? x.aid : libId(x.url) });
+  for (const x of allSightings(c)) out.push({ ...x, aid: x.aid || libId(x.url) });
   return out.filter((x) => !cur || (x.aid !== cur.id && !(x.url && cur.url && normUrl(x.url) === normUrl(cur.url))));
 }
 function seenPlacesHTML(c) {
