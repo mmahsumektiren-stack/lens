@@ -678,8 +678,26 @@ function examplesHTML(c) {
       ${on && x.tr ? `<div class="ex-tr">${esc(x.tr)}</div>` : ''}</div>`; }).join('')}
   </section>`;
 }
+// metinde kartın geçtiği her yeri işaretle: kelime çekimleriyle (compromise → compromises), kalıp olduğu gibi
+function markAll(text, term) {
+  const t = normalizeText(term).toLowerCase();
+  if (!t || t === normalizeText(text).toLowerCase()) return esc(text);
+  if (/\s/.test(t)) {
+    const re = new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'), 'gi');
+    let out = '', i = 0;
+    for (const m of text.matchAll(re)) { out += esc(text.slice(i, m.index)) + `<mark>${esc(m[0])}</mark>`; i = m.index + m[0].length; }
+    return out + esc(text.slice(i));
+  }
+  let out = '', i = 0;
+  for (const m of text.matchAll(/[A-Za-z][A-Za-z'’-]*/g)) {
+    const lw = normWord(m[0]);
+    if (lw !== t && !lemmaCandidates(lw).includes(t)) continue;
+    out += esc(text.slice(i, m.index)) + `<mark>${esc(m[0])}</mark>`; i = m.index + m[0].length;
+  }
+  return i ? out + esc(text.slice(i)) : highlight(text, term);
+}
 function sourceHTML(c) {
-  const body = c.tweet ? tweetHTML(c.tweet, highlight(c.tweet.text, c.term)) : c.context && c.context !== c.term ? `<div class="ctx">${highlight(c.context, c.term)}</div>` : '';
+  const body = c.tweet ? tweetHTML(c.tweet, markAll(c.tweet.text, c.term)) : c.context && c.context !== c.term ? `<div class="ctx">${markAll(c.context, c.term)}</div>` : '';
   const link = !c.tweet && c.source ? `<a class="src-link" href="${esc(c.source)}" target="_blank" rel="noopener">${c.article ? icon('article', 14) + `<span>${esc(c.article.title)} · ${esc(c.article.site)}</span>` : `<span>${esc(hostOf(c.source) || 'Kaynağa git')}</span>`}${icon('external', 12)}</a>` : '';
   return body || link ? `<section class="sec"><div class="sec-h"><span>Kaynak</span></div>${body}${link}</section>` : '';
 }
